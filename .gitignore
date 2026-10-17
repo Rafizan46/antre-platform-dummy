@@ -1,1 +1,14 @@
 docs/
+
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
+Thumbs.db

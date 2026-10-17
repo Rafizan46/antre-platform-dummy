@@ -1,0 +1,6 @@
+.crew/
+.vscode/
+docs/
+pnpm-lock.yaml
+**/coverage/
+**/dist/
