@@ -8,6 +8,11 @@
     "node": "^22.13.0"
   },
   "scripts": {
+    "db:bootstrap": "pnpm --filter @antre/db db:bootstrap",
+    "db:migrate": "pnpm --filter @antre/db db:migrate",
+    "db:migrate:down": "pnpm --filter @antre/db db:migrate:down",
+    "db:setup": "pnpm db:bootstrap && pnpm db:migrate",
+    "db:test:integration": "pnpm --filter @antre/db test:integration",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

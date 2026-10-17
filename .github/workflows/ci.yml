@@ -42,3 +42,49 @@ jobs:
 
       - name: Test
         run: pnpm -r test
+
+  db-integration:
+    name: Database migrations and integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    services:
+      postgres:
+        # Same image and dev-only credentials as docker-compose.dev.yml; host port 35432 matches
+        # the DATABASE_*_URL defaults in .env.example, so no extra variables are needed.
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_dev
+          POSTGRES_DB: antre
+        ports:
+          - 35432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d antre"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable pnpm (Corepack, version from packageManager)
+        run: corepack enable pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap roles and apply migrations
+        run: pnpm db:setup
+
+      - name: Roll back the last migration and apply it again
+        run: pnpm db:migrate:down && pnpm db:migrate
+
+      - name: Integration tests
+        run: pnpm db:test:integration

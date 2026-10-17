@@ -14,6 +14,7 @@ Monorepo platform SaaS antrean virtual dan reservasi slot multi-tenant untuk UMK
 | `apps/web-staff`           | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite) | kerangka                 |
 | `packages/shared-types`    | `@antre/shared-types`: enum status dan role                       | kosong                   |
 | `packages/event-contracts` | `@antre/event-contracts`: envelope dan katalog event              | kosong                   |
+| `packages/db`              | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS     | aktif                    |
 | `infra/k8s`                | Manifest k3s                                                      | placeholder              |
 | `.github/workflows`        | CI GitHub Actions                                                 | aktif                    |
 
@@ -94,11 +95,50 @@ Port host memakai pola port default + 30000 dan hanya terikat ke `127.0.0.1`, se
 
 Bila port host sudah terpakai, ubah variabel `*_HOST_PORT` di `.env`. Di Windows, hindari port 49152 sampai 65535 (rentang port dinamis yang bisa direservasi Hyper-V/WSL; cek dengan `netsh interface ipv4 show excludedportrange protocol=tcp`).
 
-Role database aplikasi (`antre_migrator`, `antre_app`, dan lainnya), topologi RabbitMQ (`antre.events` dan queue-nya), mock WhatsApp Cloud API, dan simulator pembayaran QRIS belum ada; semuanya ditambahkan di workstream terkait.
+Topologi RabbitMQ (`antre.events` dan queue-nya), mock WhatsApp Cloud API, dan simulator pembayaran QRIS belum ada; semuanya ditambahkan di workstream terkait. Role dan skema database ada di `packages/db` (bagian berikut).
+
+## Database (`packages/db`)
+
+Skema PostgreSQL (spesifikasi §6) dikelola dengan migrasi SQL murni node-pg-migrate di `packages/db/migrations`. Paket ini tidak berisi kode runtime; service nanti terhubung sendiri sebagai `antre_app`.
+
+Dari nol, setelah lingkungan Docker `up`:
+
+```sh
+pnpm db:setup              # = pnpm db:bootstrap && pnpm db:migrate
+pnpm db:test:integration   # tes integrasi di database sementara antre_it
+```
+
+- `pnpm db:bootstrap` (koneksi `DATABASE_ADMIN_URL`, superuser `postgres`): khusus dev dan CI. Menjalankan `packages/db/bootstrap`: role `antre_migrator`, `antre_app`, `antre_platform_admin`, `antre_definer` dengan password placeholder dev, plus hak `CREATE` di schema `public`. Di produksi langkah ini dikerjakan admin database (§6.1).
+- `pnpm db:migrate` (koneksi `DATABASE_MIGRATOR_URL`): menerapkan migrasi yang belum jalan, yaitu tabel, RLS, policy, GRANT, 7 fungsi `SECURITY DEFINER`, dan seed paket `FREE` dan `PAID_LOCATION`.
+- `pnpm db:migrate:down` (koneksi `DATABASE_MIGRATOR_URL`): membatalkan satu migrasi terakhir. Dua kali berturut-turut = skema kosong (data dev hilang).
+- `pnpm db:test:integration` (semua `DATABASE_*_URL`): membuat database `antre_it` dan `antre_it_roundtrip`, menjalankan bootstrap dan migrasi, menguji isolasi tenant, lalu menghapus keduanya. Database `antre` tidak disentuh.
+
+URL koneksi dibaca lewat `node --env-file` dari `.env.example`, lalu `.env` bila ada; variabel lingkungan shell selalu menang. Tidak perlu membuat `.env`, dan pesan `../../.env not found. Continuing without it.` itu normal. Bila port atau password PostgreSQL diubah di `.env`, ubah juga keempat `DATABASE_*_URL` di `.env` yang sama.
+
+`pnpm -r test` hanya menjalankan tes statis `packages/db` (tanpa database), jadi tetap hijau tanpa Docker. Tes integrasi butuh PostgreSQL di `127.0.0.1` atau `localhost` (helper tes menolak host lain karena membuat dan menghapus database) dan tidak boleh dijalankan bersamaan pada server yang sama.
+
+Aturan saat menambah migrasi:
+
+- File baru `packages/db/migrations/<timestamp milidetik>_<nama>.sql` berisi `-- Up Migration` lalu `-- Down Migration`. Migrasi yang sudah di-commit tidak diubah.
+- Tabel yang bergantung tenant: kolom `tenant_id`, `ENABLE` dan `FORCE ROW LEVEL SECURITY`, policy `tenant_isolation` untuk `antre_app`, GRANT ke `antre_app`, dan masuk daftar tabel di tes `packages/db/test`.
+- Fungsi `SECURITY DEFINER` hanya dari daftar tertutup §6.1, dengan urutan: `CREATE FUNCTION ... SET search_path = pg_catalog, public, pg_temp`, `REVOKE ALL ... FROM PUBLIC`, `GRANT EXECUTE ... TO antre_app`, lalu terakhir `ALTER FUNCTION ... OWNER TO antre_definer`. `antre_migrator` adalah anggota `antre_definer` dengan `INHERIT FALSE`, jadi setelah kepemilikan pindah ia tidak bisa lagi mengubah ACL; untuk mengganti atau menghapus fungsi pakai `SET LOCAL ROLE antre_definer` (contoh di down migration fungsi).
+- DML di migrasi berjalan sebagai `antre_migrator` dan tunduk RLS (`FORCE`): baris tenant tidak terlihat.
+
+Akun `SUPER_ADMIN` (tanpa tenant) dibuat operator platform lewat koneksi `antre_migrator`; policy `super_admin_provisioning` hanya mengizinkan baris dengan `tenant_id` NULL dan role `SUPER_ADMIN`. Hash password mengikuti modul login Tenant & Auth (belum ada):
+
+```sql
+INSERT INTO users (tenant_id, email, password_hash, role)
+VALUES (NULL, 'admin@contoh.id', '<hash password>', 'SUPER_ADMIN');
+```
+
+Reset database dev: `docker compose -f docker-compose.dev.yml down -v`, lalu `up -d --wait` dan `pnpm db:setup`.
 
 ## CI
 
-`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main`: install (`--frozen-lockfile`), cek format, lint, typecheck, dan test.
+`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan dua job:
+
+- `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, dan test.
+- `db-integration`: PostgreSQL 16 sebagai service container (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, dan `pnpm db:test:integration`.
 
 ## Konvensi
 
