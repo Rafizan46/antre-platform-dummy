@@ -7,7 +7,7 @@ Monorepo platform SaaS antrean virtual dan reservasi slot multi-tenant untuk UMK
 | Path                       | Isi                                                               | Status                   |
 | -------------------------- | ----------------------------------------------------------------- | ------------------------ |
 | `apps/gateway`             | Konfigurasi API Gateway Traefik (bukan paket Node)                | placeholder              |
-| `apps/core-services`       | Tenant & Auth: register, login, staf, settings (Fastify)          | aktif                    |
+| `apps/core-services`       | Tenant & Auth, Catalog, Queue (Fastify)                           | aktif                    |
 | `apps/wa-channel`          | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)   | kerangka, `GET /healthz` |
 | `apps/realtime-gateway`    | Realtime SSE Gateway (Fastify)                                    | kerangka, `GET /healthz` |
 | `apps/notification-worker` | Konsumer RabbitMQ pengirim pesan WhatsApp                         | kerangka                 |
@@ -133,9 +133,23 @@ VALUES (NULL, 'admin@contoh.id', '<hash password>', 'SUPER_ADMIN');
 
 Reset database dev: `docker compose -f docker-compose.dev.yml down -v`, lalu `up -d --wait` dan `pnpm db:setup`.
 
-## Tenant & Auth (`apps/core-services`)
+## Core services (`apps/core-services`)
 
-Endpoint `/api/v1`: `POST /auth/register`, `POST /auth/login`, `GET|POST /users`, `PATCH /users/:id` (OWNER), dan `GET|PATCH /tenants/me/settings`. Service terhubung ke PostgreSQL sebagai `antre_app` (`DATABASE_APP_URL`) dan membaca `JWT_SECRET` dari lingkungan (minimal 32 karakter; nilai `dev-only...` di `.env.example` hanya untuk dev dan ditolak saat `NODE_ENV=production`). Belum ada entry server (`listen`); itu menyusul di workstream deploy.
+Endpoint `/api/v1` (daftar lengkap di `docs/spesifikasi-sistem-antre.md` §8; respons daftar berbentuk objek, mis. `{ "locations": [...] }`):
+
+- Tenant & Auth: `POST /auth/register`, `POST /auth/login`, `GET|POST /users`, `PATCH /users/:id` (OWNER), `GET|PATCH /tenants/me/settings`.
+- Lokasi: `GET|POST /locations`, `PATCH /locations/:id` (tulis: OWNER).
+- Katalog: `GET|POST /catalog/services`, `PATCH /catalog/services/:id`, `GET|POST /catalog/resources`, `PATCH /catalog/resources/:id`, `GET|PUT /catalog/locations/:location_id/operating-hours`.
+- Antrean: `POST|GET /queues/tickets`, `POST /queues/tickets/call-next`, `POST /queues/tickets/:id/actions` (RECALL, SERVE, COMPLETE, NO_SHOW).
+- Internal untuk WhatsApp Channel Service (`/internal/v1`, jangan dirutekan lewat gateway publik): `POST /queues/tickets`, `GET /queues/tickets/active`, `POST /queues/tickets/:id/cancel`, `GET /catalog/services`. Header `Authorization: Bearer <WA_CHANNEL_SERVICE_TOKEN>` dan `X-Antre-Tenant-Id`.
+
+Service terhubung ke PostgreSQL sebagai `antre_app` (`DATABASE_APP_URL`) dan membaca `JWT_SECRET` serta `WA_CHANNEL_SERVICE_TOKEN` dari lingkungan (masing-masing minimal 32 karakter; nilai `dev-only...` di `.env.example` hanya untuk dev dan ditolak saat `NODE_ENV=production`). Host dan port listen dari `CORE_SERVICES_HOST` (default `127.0.0.1`) dan `CORE_SERVICES_PORT` (default `3000`). Event `queue.*` dan `billing.quota.*` dipublikasikan lewat antarmuka `EventPublisher` setelah commit; broker RabbitMQ menyusul (sementara no-op).
+
+```sh
+pnpm --filter @antre/core-services build   # bundel Vite SSR ke apps/core-services/dist/server.js
+pnpm --filter @antre/core-services start   # jalankan hasil build (butuh DATABASE_APP_URL, JWT_SECRET, WA_CHANNEL_SERVICE_TOKEN)
+pnpm --filter @antre/core-services dev     # build lalu jalankan dengan nilai dev dari .env.example
+```
 
 ```sh
 pnpm core:test:integration   # tes API + DB di database sementara antre_it_core (butuh Docker)
@@ -147,8 +161,8 @@ pnpm core:test:integration   # tes API + DB di database sementara antre_it_core 
 
 `.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan dua job:
 
-- `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, dan test.
-- `db-integration`: PostgreSQL 16 sebagai service container (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, lalu `pnpm core:test:integration` (tes API Tenant & Auth).
+- `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, test, dan build core-services.
+- `db-integration`: PostgreSQL 16 sebagai service container (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, lalu `pnpm core:test:integration` (tes API Tenant & Auth, Catalog, Queue).
 
 ## Konvensi
 

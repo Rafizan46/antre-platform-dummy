@@ -6,6 +6,7 @@ import type pg from 'pg';
 
 import { withTransaction } from '../db/transaction.js';
 import { AppError } from '../errors.js';
+import type { EventPublisher } from '../events/publisher.js';
 import type { LoginRateLimiter } from './login-rate-limiter.js';
 import type { AuthContext, TokenService } from './tokens.js';
 
@@ -16,6 +17,9 @@ export interface AppDeps {
   loginLimiter: LoginRateLimiter;
   verifyDummyPassword: (password: string) => Promise<boolean>;
   now: () => Date;
+  events: EventPublisher;
+  /** Static service token of the WhatsApp Channel Service (/internal/v1). */
+  waChannelToken: string;
 }
 
 declare module 'fastify' {

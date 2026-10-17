@@ -1,5 +1,5 @@
-// Core REST services (spec section 5.1). Currently Tenant & Auth: register, login, staff, and
-// tenant settings. Catalog, Queue, and Booking routes are added in later workstreams.
+// Core REST services (spec section 5.1): Tenant & Auth, Catalog, and Queue. Booking routes are
+// added in a later workstream.
 import Fastify from 'fastify';
 import type pg from 'pg';
 
@@ -8,7 +8,13 @@ import { createDummyVerifier } from './auth/password.js';
 import { authenticate, type AppDeps } from './auth/plugin.js';
 import { authRoutes } from './auth/routes.js';
 import { createTokenService } from './auth/tokens.js';
+import { catalogRoutes } from './catalog/routes.js';
 import { registerErrorHandling } from './errors.js';
+import { NoopEventPublisher, type EventPublisher } from './events/publisher.js';
+import { authenticateInternal } from './internal/plugin.js';
+import { internalRoutes } from './internal/routes.js';
+import { locationsRoutes } from './locations/routes.js';
+import { queueRoutes } from './queue/routes.js';
 import { tenantsRoutes } from './tenants/routes.js';
 import { usersRoutes } from './users/routes.js';
 
@@ -16,6 +22,10 @@ export interface AppOptions {
   /** Pool of the antre_app role. The caller owns it and closes it. */
   pool: pg.Pool;
   jwtSecret: string;
+  /** Static service token of the WhatsApp Channel Service for /internal/v1. */
+  waChannelToken: string;
+  /** Defaults to a no-op publisher (the broker comes with the messaging workstream). */
+  events?: EventPublisher;
   now?: () => Date;
   logger?: boolean;
 }
@@ -31,10 +41,13 @@ export function buildApp(options: AppOptions) {
     // Created now (not on first use) so the first unknown-email login is not faster than later ones.
     verifyDummyPassword: createDummyVerifier(),
     now,
+    events: options.events ?? new NoopEventPublisher(),
+    waChannelToken: options.waChannelToken,
   };
 
   registerErrorHandling(app);
   app.decorateRequest('auth', null);
+  app.decorateRequest('internalTenantId', null);
 
   app.get('/healthz', async () => ({ status: 'ok', service: 'core-services' }));
 
@@ -47,8 +60,20 @@ export function buildApp(options: AppOptions) {
       scope.addHook('onRequest', authenticate(deps));
       await scope.register(usersRoutes, { prefix: '/users', deps });
       await scope.register(tenantsRoutes, { prefix: '/tenants', deps });
+      await scope.register(locationsRoutes, { prefix: '/locations', deps });
+      await scope.register(catalogRoutes, { prefix: '/catalog', deps });
+      await scope.register(queueRoutes, { prefix: '/queues', deps });
     },
     { prefix: '/api/v1' },
+  );
+
+  // Service-to-service routes of the WhatsApp Channel Service; never exposed through the gateway.
+  app.register(
+    async (scope) => {
+      scope.addHook('onRequest', authenticateInternal(deps));
+      await scope.register(internalRoutes, { deps });
+    },
+    { prefix: '/internal/v1' },
   );
 
   return app;

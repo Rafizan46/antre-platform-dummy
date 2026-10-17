@@ -43,6 +43,9 @@ jobs:
       - name: Test
         run: pnpm -r test
 
+      - name: Build core-services
+        run: pnpm --filter @antre/core-services build
+
   db-integration:
     name: Database and API integration tests
     runs-on: ubuntu-latest

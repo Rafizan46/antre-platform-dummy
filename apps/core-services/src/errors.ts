@@ -1,5 +1,10 @@
 // Application errors and the central Fastify error handling (body format ApiErrorBody, spec section 8).
-import { ERROR_HTTP_STATUS, type ApiErrorBody, type ErrorCode } from '@antre/shared-types';
+import {
+  ERROR_HTTP_STATUS,
+  uuidSchema,
+  type ApiErrorBody,
+  type ErrorCode,
+} from '@antre/shared-types';
 import type { FastifyInstance } from 'fastify';
 import type { z } from 'zod';
 
@@ -39,6 +44,12 @@ export function parseOrThrow<S extends z.ZodType>(schema: S, value: unknown): z.
   return result.data;
 }
 
+/** A path id that is not a uuid cannot exist: 404 with `message`. */
+export function parseIdOr404(value: string, message: string): string {
+  if (!uuidSchema.safeParse(value).success) throw new AppError('NOT_FOUND', message);
+  return value;
+}
+
 function errorBody(code: ErrorCode, message: string, details?: unknown): ApiErrorBody {
   return { error: details === undefined ? { code, message } : { code, message, details } };
 }
@@ -75,4 +86,11 @@ export function uniqueViolationConstraint(error: unknown): string | null {
   if (typeof error !== 'object' || error === null) return null;
   const { code, constraint } = error as { code?: unknown; constraint?: unknown };
   return code === '23505' && typeof constraint === 'string' ? constraint : null;
+}
+
+/** True when `error` is a PostgreSQL foreign key violation (23503). */
+export function foreignKeyViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23503'
+  );
 }

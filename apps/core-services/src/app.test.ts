@@ -5,7 +5,11 @@ import { buildApp } from './app.js';
 
 // The pool never connects: every request below is answered before any query.
 const pool = new pg.Pool({ connectionString: 'postgres://u:p@127.0.0.1:1/x' });
-const app = buildApp({ pool, jwtSecret: 'a-valid-secret-of-at-least-32-characters-long' });
+const app = buildApp({
+  pool,
+  jwtSecret: 'a-valid-secret-of-at-least-32-characters-long',
+  waChannelToken: 'a-valid-service-token-of-at-least-32-chars',
+});
 
 beforeAll(async () => {
   await app.ready();
@@ -31,6 +35,29 @@ describe('core-services app', () => {
     expect(response.json()).toEqual({
       error: { code: 'UNAUTHORIZED', message: expect.any(String) },
     });
+  });
+
+  it('rejects an internal route without or with a wrong service token', async () => {
+    const missing = await app.inject({ method: 'GET', url: '/internal/v1/catalog/services' });
+    expect(missing.statusCode).toBe(401);
+
+    const wrong = await app.inject({
+      method: 'GET',
+      url: '/internal/v1/catalog/services',
+      headers: { authorization: 'Bearer not-the-service-token' },
+    });
+    expect(wrong.statusCode).toBe(401);
+  });
+
+  it('checks the service token before the tenant header', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/internal/v1/catalog/services',
+      headers: { authorization: 'Bearer a-valid-service-token-of-at-least-32-chars' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('VALIDATION_ERROR');
   });
 
   it('answers unknown routes with 404 NOT_FOUND', async () => {

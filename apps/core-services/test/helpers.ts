@@ -2,7 +2,8 @@
 // and login through the real HTTP routes, and reads in a tenant context.
 import { randomUUID } from 'node:crypto';
 
-import type { RegisterResponse } from '@antre/shared-types';
+import type { EventEnvelope } from '@antre/event-contracts';
+import type { LocationDto, RegisterResponse } from '@antre/shared-types';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { inject } from 'vitest';
@@ -10,6 +11,7 @@ import { inject } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import { withTransaction } from '../src/db/transaction.js';
+import { InMemoryEventPublisher } from '../src/events/publisher.js';
 
 export const DEFAULT_PASSWORD = 'password-ok-123';
 
@@ -18,19 +20,29 @@ export interface TestApp {
   /** Pool of the antre_app role, the same one the app uses. */
   pool: pg.Pool;
   jwtSecret: string;
+  /** Service token of the WhatsApp Channel Service for /internal/v1. */
+  waChannelToken: string;
+  /** Events published after commits. */
+  events: InMemoryEventPublisher;
   close: () => Promise<void>;
 }
 
 export async function createTestApp(options: { now?: () => Date } = {}): Promise<TestApp> {
   const urls = inject('databaseUrls');
   const pool = new pg.Pool({ connectionString: urls.app, max: 10 });
-  const { jwtSecret } = loadConfig({ ...process.env, DATABASE_APP_URL: urls.app });
-  const app = buildApp({ pool, jwtSecret, now: options.now });
+  const { jwtSecret, waChannelToken } = loadConfig({
+    ...process.env,
+    DATABASE_APP_URL: urls.app,
+  });
+  const events = new InMemoryEventPublisher();
+  const app = buildApp({ pool, jwtSecret, waChannelToken, events, now: options.now });
   await app.ready();
   return {
     app,
     pool,
     jwtSecret,
+    waChannelToken,
+    events,
     close: async () => {
       await app.close();
       await pool.end();
@@ -123,4 +135,128 @@ export async function queryInTenant<Row extends pg.QueryResultRow>(
     tenantId,
     async (client) => (await client.query<Row>(sql, params)).rows,
   );
+}
+
+/** Headers of the WhatsApp Channel Service for /internal/v1. */
+export function internalHeaders(ctx: TestApp, tenantId: string): Record<string, string> {
+  return { authorization: `Bearer ${ctx.waChannelToken}`, 'x-antre-tenant-id': tenantId };
+}
+
+/** A mutable clock for the app: `set` and `advance` move the time the services see. */
+export function createClock(iso: string) {
+  let current = new Date(iso);
+  return {
+    now: (): Date => new Date(current),
+    set(next: string): void {
+      current = new Date(next);
+    },
+    advance(milliseconds: number): void {
+      current = new Date(current.getTime() + milliseconds);
+    },
+  };
+}
+export type TestClock = ReturnType<typeof createClock>;
+
+/** Default test time: 2026-10-19 10:00 in Asia/Jakarta (a Monday). */
+export const DEFAULT_CLOCK_ISO = '2026-10-19T03:00:00Z';
+
+export async function apiRequest(
+  app: FastifyInstance,
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+  url: string,
+  headers: Record<string, string>,
+  payload?: object,
+) {
+  return app.inject({ method, url, headers, payload });
+}
+
+export const ALL_WEEK = Array.from({ length: 7 }, (_, day_of_week) => ({
+  day_of_week,
+  open_time: '00:00',
+  close_time: '23:59',
+}));
+
+export interface QueueFixture {
+  tenant: RegisteredTenant;
+  locationId: string;
+  serviceId: string;
+  resourceId: string;
+  /** Bearer headers; call refreshTokens() after moving the clock by hours. */
+  owner: Record<string, string>;
+  caller: Record<string, string>;
+  cashier: Record<string, string>;
+  refreshTokens: () => Promise<void>;
+}
+
+/**
+ * A tenant with one location open all week 00:00-23:59, service A (10 min) served by one resource,
+ * and an owner, a caller, and a cashier session.
+ */
+export async function setupQueueFixture(ctx: TestApp): Promise<QueueFixture> {
+  const tenant = await registerTenant(ctx.app);
+  const callerEmail = `caller-${randomUUID().slice(0, 8)}@example.test`;
+  const cashierEmail = `cashier-${randomUUID().slice(0, 8)}@example.test`;
+
+  const loginAll = async () => ({
+    owner: bearer(await login(ctx.app, tenant.ownerEmail, tenant.password)),
+    caller: bearer(await login(ctx.app, callerEmail, DEFAULT_PASSWORD)),
+    cashier: bearer(await login(ctx.app, cashierEmail, DEFAULT_PASSWORD)),
+  });
+
+  const ownerHeaders = bearer(await login(ctx.app, tenant.ownerEmail, tenant.password));
+  for (const [role, email] of [
+    ['STAFF_CALLER', callerEmail],
+    ['STAFF_CASHIER', cashierEmail],
+  ] as const) {
+    const response = await apiRequest(ctx.app, 'POST', '/api/v1/users', ownerHeaders, {
+      email,
+      password: DEFAULT_PASSWORD,
+      role,
+    });
+    if (response.statusCode !== 201) throw new Error(`staff failed: ${response.body}`);
+  }
+
+  const locations = await apiRequest(ctx.app, 'GET', '/api/v1/locations', ownerHeaders);
+  const locationId = locations.json<{ locations: LocationDto[] }>().locations[0]!.id;
+
+  const hours = await apiRequest(
+    ctx.app,
+    'PUT',
+    `/api/v1/catalog/locations/${locationId}/operating-hours`,
+    ownerHeaders,
+    { slot_interval_min: 30, days: ALL_WEEK },
+  );
+  if (hours.statusCode !== 200) throw new Error(`hours failed: ${hours.body}`);
+
+  const service = await apiRequest(ctx.app, 'POST', '/api/v1/catalog/services', ownerHeaders, {
+    name: 'Umum',
+    ticket_prefix: 'A',
+    avg_duration_min: 10,
+  });
+  if (service.statusCode !== 201) throw new Error(`service failed: ${service.body}`);
+  const serviceId = service.json<{ id: string }>().id;
+
+  const resource = await apiRequest(ctx.app, 'POST', '/api/v1/catalog/resources', ownerHeaders, {
+    location_id: locationId,
+    name: 'Loket 1',
+    service_ids: [serviceId],
+  });
+  if (resource.statusCode !== 201) throw new Error(`resource failed: ${resource.body}`);
+
+  const fixture: QueueFixture = {
+    tenant,
+    locationId,
+    serviceId,
+    resourceId: resource.json<{ id: string }>().id,
+    ...(await loginAll()),
+    refreshTokens: async () => {
+      Object.assign(fixture, await loginAll());
+    },
+  };
+  return fixture;
+}
+
+/** Events of one type published so far. */
+export function eventsOfType(ctx: TestApp, type: EventEnvelope['event_type']): EventEnvelope[] {
+  return ctx.events.events.filter((event) => event.event_type === type);
 }

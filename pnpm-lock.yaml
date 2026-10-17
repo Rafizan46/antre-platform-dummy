@@ -92,6 +92,9 @@ importers:
 
   apps/core-services:
     dependencies:
+      '@antre/event-contracts':
+        specifier: workspace:*
+        version: link:../../packages/event-contracts
       '@antre/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

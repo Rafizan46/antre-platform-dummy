@@ -11,7 +11,11 @@ import {
 } from './database.js';
 
 const ROUND_TRIP_DATABASE = 'antre_it_roundtrip';
-const MIGRATIONS = ['1792195200000_core-schema', '1792195260000_definer-functions'];
+const MIGRATIONS = [
+  '1792195200000_core-schema',
+  '1792195260000_definer-functions',
+  '1792281600000_catalog-queue-constraints',
+];
 
 async function countObjects(adminUrl: string): Promise<{ tables: number; functions: number }> {
   const client = new pg.Client({ connectionString: adminUrl });
