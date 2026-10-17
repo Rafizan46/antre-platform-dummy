@@ -46,8 +46,11 @@ jobs:
       - name: Build core-services
         run: pnpm --filter @antre/core-services build
 
+      - name: Build notification-worker
+        run: pnpm --filter @antre/notification-worker build
+
   db-integration:
-    name: Database and API integration tests
+    name: Database, API, and messaging integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -79,6 +82,23 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      rabbitmq:
+        # Same image and dev-only credentials as docker-compose.dev.yml; host ports 35672 (AMQP) and
+        # 45672 (management API, used by the tests to create a temporary vhost) match RABBITMQ_URL
+        # and RABBITMQ_MANAGEMENT_URL in .env.example.
+        image: rabbitmq:4.3.6-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: antre
+          RABBITMQ_DEFAULT_PASS: rabbitmq_dev
+        ports:
+          - 35672:5672
+          - 45672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -105,3 +125,6 @@ jobs:
 
       - name: Core services integration tests
         run: pnpm core:test:integration
+
+      - name: Notification worker integration tests (PostgreSQL + RabbitMQ)
+        run: pnpm notif:test:integration

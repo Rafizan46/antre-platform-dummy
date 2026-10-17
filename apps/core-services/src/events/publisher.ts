@@ -1,5 +1,6 @@
-// Event publishing seam (spec section 7.1). The RabbitMQ publisher and the outbox decision come
-// with the messaging workstream; until then the server uses the no-op publisher.
+// Event publishing seam (spec section 7.1). The server uses RabbitEventPublisher from
+// @antre/messaging (publisher confirms, in-memory buffer while the broker is down, no outbox: see
+// spec section 9.5); tests use the in-memory publisher.
 import type { EventEnvelope } from '@antre/event-contracts';
 
 export interface EventPublisher {

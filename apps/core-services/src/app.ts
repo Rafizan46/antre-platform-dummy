@@ -32,7 +32,7 @@ export interface AppOptions {
   slotLock: SlotLock;
   /** HMAC secret of the QRIS payment callback. */
   paymentCallbackSecret: string;
-  /** Defaults to a no-op publisher (the broker comes with the messaging workstream). */
+  /** Defaults to a no-op publisher; server.ts passes the RabbitMQ publisher. */
   events?: EventPublisher;
   now?: () => Date;
   logger?: boolean;

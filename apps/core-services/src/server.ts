@@ -1,18 +1,26 @@
-// Entry point: loads the configuration, connects the antre_app pool and Redis, starts the booking
-// jobs, and listens.
+// Entry point: loads the configuration, connects the antre_app pool, Redis, and RabbitMQ, starts
+// the booking jobs, and listens.
+import { RabbitEventPublisher } from '@antre/messaging';
 import pg from 'pg';
 
 import { buildApp } from './app.js';
 import { startBookingJobs } from './booking/jobs.js';
 import { RedisSlotLock } from './booking/slot-lock.js';
 import { loadConfig } from './config.js';
-import { NoopEventPublisher } from './events/publisher.js';
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
   const pool = new pg.Pool({ connectionString: config.databaseUrl });
-  const events = new NoopEventPublisher();
-  // The Redis client logs through the app logger, which exists only after the client does.
+  // The Redis client and the publisher log through the app logger, which exists only after them.
+  const events = new RabbitEventPublisher({
+    url: config.rabbitmqUrl,
+    name: 'core-services',
+    log: {
+      info: (object, message) => app.log.info(object, message),
+      warn: (object, message) => app.log.warn(object, message),
+      error: (object, message) => app.log.error(object, message),
+    },
+  });
   const slotLock = new RedisSlotLock({
     url: config.redisUrl,
     log: { warn: (object, message) => app.log.warn(object, message) },
@@ -33,6 +41,10 @@ async function main(): Promise<void> {
     app.log.warn({ err: error }, 'redis unavailable at start; holds use the database check');
   });
 
+  // RabbitMQ down at start is not fatal either: events are buffered in memory and flushed after
+  // the (re)connect; a publish never fails a request (FR-NOTIF-01, NFR-RELI-01).
+  events.start();
+
   const jobs = startBookingJobs({ pool, slotLock, events, now: () => new Date(), log: app.log });
 
   let stopping = false;
@@ -43,6 +55,7 @@ async function main(): Promise<void> {
     jobs
       .stop()
       .then(() => app.close())
+      .then(() => events.close())
       .then(() => slotLock.close())
       .then(() => pool.end())
       .catch((error: unknown) => {
@@ -58,6 +71,7 @@ async function main(): Promise<void> {
   } catch (error) {
     app.log.error({ err: error }, 'failed to start');
     await jobs.stop();
+    await events.close();
     await slotLock.close();
     await pool.end();
     process.exitCode = 1;

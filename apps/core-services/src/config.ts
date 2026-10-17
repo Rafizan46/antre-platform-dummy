@@ -9,6 +9,8 @@ export interface CoreConfig {
   redisUrl: string;
   /** HMAC secret that signs the QRIS payment callback (spec section 7.4). */
   paymentCallbackSecret: string;
+  /** RabbitMQ for the antre.events publisher (amqp:// or amqps://). */
+  rabbitmqUrl: string;
   host: string;
   port: number;
 }
@@ -41,6 +43,16 @@ function readRedisUrl(value: string | undefined): string {
   return value;
 }
 
+function readRabbitmqUrl(value: string | undefined): string {
+  if (!value) {
+    throw new Error('RABBITMQ_URL is not set');
+  }
+  if (!value.startsWith('amqp://') && !value.startsWith('amqps://')) {
+    throw new Error('RABBITMQ_URL must start with amqp:// or amqps://');
+  }
+  return value;
+}
+
 function readPort(value: string | undefined): number {
   if (value === undefined || value === '') return DEFAULT_PORT;
   const port = Number(value);
@@ -60,6 +72,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): CoreConfig {
   const waChannelToken = readSecret(env, 'WA_CHANNEL_SERVICE_TOKEN');
   const paymentCallbackSecret = readSecret(env, 'PAYMENT_CALLBACK_SECRET');
   const redisUrl = readRedisUrl(env.REDIS_URL);
+  const rabbitmqUrl = readRabbitmqUrl(env.RABBITMQ_URL);
 
   return {
     databaseUrl,
@@ -67,6 +80,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): CoreConfig {
     waChannelToken,
     redisUrl,
     paymentCallbackSecret,
+    rabbitmqUrl,
     host: env.CORE_SERVICES_HOST || DEFAULT_HOST,
     port: readPort(env.CORE_SERVICES_PORT),
   };

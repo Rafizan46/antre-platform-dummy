@@ -14,8 +14,10 @@
   },
   "dependencies": {
     "@antre/event-contracts": "workspace:*",
+    "@antre/messaging": "workspace:*",
     "@antre/shared-types": "workspace:*",
     "@redis/client": "catalog:",
+    "amqplib": "catalog:",
     "fastify": "catalog:",
     "jose": "catalog:",
     "pg": "catalog:",

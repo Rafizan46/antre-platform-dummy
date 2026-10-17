@@ -12,7 +12,7 @@ import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import { InMemorySlotLock, RedisSlotLock, type SlotLock } from '../src/booking/slot-lock.js';
 import { withTransaction } from '../src/db/transaction.js';
-import { InMemoryEventPublisher } from '../src/events/publisher.js';
+import { InMemoryEventPublisher, type EventPublisher } from '../src/events/publisher.js';
 
 export const DEFAULT_PASSWORD = 'password-ok-123';
 
@@ -33,7 +33,7 @@ export interface TestApp {
 }
 
 export async function createTestApp(
-  options: { now?: () => Date; slotLock?: SlotLock } = {},
+  options: { now?: () => Date; slotLock?: SlotLock; publisher?: EventPublisher } = {},
 ): Promise<TestApp> {
   const urls = inject('databaseUrls');
   const pool = new pg.Pool({ connectionString: urls.app, max: 10 });
@@ -49,7 +49,8 @@ export async function createTestApp(
     waChannelToken,
     slotLock,
     paymentCallbackSecret,
-    events,
+    // A real publisher (e.g. RabbitMQ) replaces the in-memory one; `events` then stays empty.
+    events: options.publisher ?? events,
     now: options.now,
   });
   await app.ready();

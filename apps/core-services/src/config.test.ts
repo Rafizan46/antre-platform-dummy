@@ -6,12 +6,14 @@ const SECRET = 'a-valid-secret-of-at-least-32-characters-long';
 const TOKEN = 'a-valid-service-token-of-at-least-32-chars';
 const PAYMENT_SECRET = 'a-valid-payment-secret-of-at-least-32-chars';
 const REDIS_URL = 'redis://127.0.0.1:6379';
+const RABBITMQ_URL = 'amqp://user:pass@127.0.0.1:5672';
 const BASE = {
   DATABASE_APP_URL: 'postgres://x',
   JWT_SECRET: SECRET,
   WA_CHANNEL_SERVICE_TOKEN: TOKEN,
   PAYMENT_CALLBACK_SECRET: PAYMENT_SECRET,
   REDIS_URL,
+  RABBITMQ_URL,
 };
 
 describe('loadConfig', () => {
@@ -22,6 +24,7 @@ describe('loadConfig', () => {
       waChannelToken: TOKEN,
       redisUrl: REDIS_URL,
       paymentCallbackSecret: PAYMENT_SECRET,
+      rabbitmqUrl: RABBITMQ_URL,
       host: '127.0.0.1',
       port: 3000,
     });
@@ -71,6 +74,23 @@ describe('loadConfig', () => {
     }
     expect(loadConfig({ ...BASE, REDIS_URL: 'rediss://cache:6380' }).redisUrl).toBe(
       'rediss://cache:6380',
+    );
+  });
+
+  it('requires an amqp:// or amqps:// RABBITMQ_URL without echoing it', () => {
+    const { RABBITMQ_URL: rabbit, ...withoutRabbit } = BASE;
+    expect(rabbit).toBeTruthy();
+    expect(() => loadConfig(withoutRabbit)).toThrow('RABBITMQ_URL');
+    const bad = 'http://user:secret-pass@broker:5672';
+    try {
+      loadConfig({ ...BASE, RABBITMQ_URL: bad });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as Error).message).toContain('RABBITMQ_URL');
+      expect((error as Error).message).not.toContain('secret-pass');
+    }
+    expect(loadConfig({ ...BASE, RABBITMQ_URL: 'amqps://broker:5671' }).rabbitmqUrl).toBe(
+      'amqps://broker:5671',
     );
   });
 
