@@ -44,7 +44,7 @@ jobs:
         run: pnpm -r test
 
   db-integration:
-    name: Database migrations and integration tests
+    name: Database and API integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -88,3 +88,6 @@ jobs:
 
       - name: Integration tests
         run: pnpm db:test:integration
+
+      - name: Core services integration tests
+        run: pnpm core:test:integration

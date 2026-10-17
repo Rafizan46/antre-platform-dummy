@@ -6,13 +6,20 @@
   "scripts": {
     "lint": "eslint .",
     "test": "vitest run",
+    "test:integration": "node --env-file=../../.env.example --env-file-if-exists=../../.env ./node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "fastify": "catalog:"
+    "@antre/shared-types": "workspace:*",
+    "fastify": "catalog:",
+    "jose": "catalog:",
+    "pg": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@antre/db": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

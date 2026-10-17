@@ -12,6 +12,7 @@
     "db:migrate": "pnpm --filter @antre/db db:migrate",
     "db:migrate:down": "pnpm --filter @antre/db db:migrate:down",
     "db:setup": "pnpm db:bootstrap && pnpm db:migrate",
+    "core:test:integration": "pnpm --filter @antre/core-services test:integration",
     "db:test:integration": "pnpm --filter @antre/db test:integration",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

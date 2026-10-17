@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./testing": "./test/database.ts"
+  },
   "scripts": {
     "db:bootstrap": "node --env-file=../../.env.example --env-file-if-exists=../../.env ./node_modules/node-pg-migrate/bin/node-pg-migrate.js up --migrations-dir bootstrap --migrations-table pgmigrations_bootstrap --database-url-var DATABASE_ADMIN_URL --no-verbose",
     "db:migrate": "node --env-file=../../.env.example --env-file-if-exists=../../.env ./node_modules/node-pg-migrate/bin/node-pg-migrate.js up --migrations-dir migrations --database-url-var DATABASE_MIGRATOR_URL --no-verbose",

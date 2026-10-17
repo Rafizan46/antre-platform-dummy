@@ -33,6 +33,9 @@ catalogs:
     fastify:
       specifier: 5.12.7
       version: 5.12.7
+    jose:
+      specifier: 6.2.12
+      version: 6.2.12
     node-pg-migrate:
       specifier: 9.0.0
       version: 9.0.0
@@ -60,6 +63,9 @@ catalogs:
     vitest:
       specifier: 5.0.5
       version: 5.0.5
+    zod:
+      specifier: 4.6.7
+      version: 4.6.7
 
 importers:
 
@@ -86,13 +92,31 @@ importers:
 
   apps/core-services:
     dependencies:
+      '@antre/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       fastify:
         specifier: 'catalog:'
         version: 5.12.7
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.12
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
+      '@antre/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
       eslint:
         specifier: 'catalog:'
         version: 10.12.0(jiti@2.7.0)
@@ -231,6 +255,13 @@ importers:
         version: 5.0.5(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(jiti@2.7.0))
 
   packages/event-contracts:
+    dependencies:
+      '@antre/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -249,6 +280,10 @@ importers:
         version: 5.0.5(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(jiti@2.7.0))
 
   packages/shared-types:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -874,6 +909,9 @@ packages:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
 
+  jose@6.2.12:
+    resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
+
   json-schema-ref-resolver@3.0.1:
     resolution: {integrity: sha512-w+HwgljXpVwZ3IidoUR1qPZxSOQ+NRQWuVe6a5pe8XbHsNZE4UAwVPUvzZagn7yBKbJtt6UJnRFYbNTRPZI45Q==}
 
@@ -1390,6 +1428,9 @@ packages:
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
+
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -1968,6 +2009,8 @@ snapshots:
 
   jiti@2.7.0: {}
 
+  jose@6.2.12: {}
+
   json-schema-ref-resolver@3.0.1:
     dependencies:
       dequal: 2.0.3
@@ -2376,3 +2419,5 @@ snapshots:
       yargs-parser: 22.0.0
 
   yocto-queue@0.1.0: {}
+
+  zod@4.6.7: {}

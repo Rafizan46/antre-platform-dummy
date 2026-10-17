@@ -7,13 +7,13 @@ Monorepo platform SaaS antrean virtual dan reservasi slot multi-tenant untuk UMK
 | Path                       | Isi                                                               | Status                   |
 | -------------------------- | ----------------------------------------------------------------- | ------------------------ |
 | `apps/gateway`             | Konfigurasi API Gateway Traefik (bukan paket Node)                | placeholder              |
-| `apps/core-services`       | Tenant & Auth, Catalog, Queue, Booking (Fastify)                  | kerangka, `GET /healthz` |
+| `apps/core-services`       | Tenant & Auth: register, login, staf, settings (Fastify)          | aktif                    |
 | `apps/wa-channel`          | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)   | kerangka, `GET /healthz` |
 | `apps/realtime-gateway`    | Realtime SSE Gateway (Fastify)                                    | kerangka, `GET /healthz` |
 | `apps/notification-worker` | Konsumer RabbitMQ pengirim pesan WhatsApp                         | kerangka                 |
 | `apps/web-staff`           | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite) | kerangka                 |
-| `packages/shared-types`    | `@antre/shared-types`: enum status dan role                       | kosong                   |
-| `packages/event-contracts` | `@antre/event-contracts`: envelope dan katalog event              | kosong                   |
+| `packages/shared-types`    | `@antre/shared-types`: enum status dan role                       | aktif                    |
+| `packages/event-contracts` | `@antre/event-contracts`: envelope dan katalog event              | aktif                    |
 | `packages/db`              | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS     | aktif                    |
 | `infra/k8s`                | Manifest k3s                                                      | placeholder              |
 | `.github/workflows`        | CI GitHub Actions                                                 | aktif                    |
@@ -124,7 +124,7 @@ Aturan saat menambah migrasi:
 - Fungsi `SECURITY DEFINER` hanya dari daftar tertutup §6.1, dengan urutan: `CREATE FUNCTION ... SET search_path = pg_catalog, public, pg_temp`, `REVOKE ALL ... FROM PUBLIC`, `GRANT EXECUTE ... TO antre_app`, lalu terakhir `ALTER FUNCTION ... OWNER TO antre_definer`. `antre_migrator` adalah anggota `antre_definer` dengan `INHERIT FALSE`, jadi setelah kepemilikan pindah ia tidak bisa lagi mengubah ACL; untuk mengganti atau menghapus fungsi pakai `SET LOCAL ROLE antre_definer` (contoh di down migration fungsi).
 - DML di migrasi berjalan sebagai `antre_migrator` dan tunduk RLS (`FORCE`): baris tenant tidak terlihat.
 
-Akun `SUPER_ADMIN` (tanpa tenant) dibuat operator platform lewat koneksi `antre_migrator`; policy `super_admin_provisioning` hanya mengizinkan baris dengan `tenant_id` NULL dan role `SUPER_ADMIN`. Hash password mengikuti modul login Tenant & Auth (belum ada):
+Akun `SUPER_ADMIN` (tanpa tenant) dibuat operator platform lewat koneksi `antre_migrator`; policy `super_admin_provisioning` hanya mengizinkan baris dengan `tenant_id` NULL dan role `SUPER_ADMIN`. Hash password berformat `scrypt$32768$8$3$<salt>$<hash>` dari `hashPassword` (`apps/core-services/src/auth/password.ts`); alat CLI menyusul:
 
 ```sql
 INSERT INTO users (tenant_id, email, password_hash, role)
@@ -133,12 +133,22 @@ VALUES (NULL, 'admin@contoh.id', '<hash password>', 'SUPER_ADMIN');
 
 Reset database dev: `docker compose -f docker-compose.dev.yml down -v`, lalu `up -d --wait` dan `pnpm db:setup`.
 
+## Tenant & Auth (`apps/core-services`)
+
+Endpoint `/api/v1`: `POST /auth/register`, `POST /auth/login`, `GET|POST /users`, `PATCH /users/:id` (OWNER), dan `GET|PATCH /tenants/me/settings`. Service terhubung ke PostgreSQL sebagai `antre_app` (`DATABASE_APP_URL`) dan membaca `JWT_SECRET` dari lingkungan (minimal 32 karakter; nilai `dev-only...` di `.env.example` hanya untuk dev dan ditolak saat `NODE_ENV=production`). Belum ada entry server (`listen`); itu menyusul di workstream deploy.
+
+```sh
+pnpm core:test:integration   # tes API + DB di database sementara antre_it_core (butuh Docker)
+```
+
+`pnpm -r test` hanya menjalankan tes unit, jadi tetap hijau tanpa Docker.
+
 ## CI
 
 `.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan dua job:
 
 - `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, dan test.
-- `db-integration`: PostgreSQL 16 sebagai service container (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, dan `pnpm db:test:integration`.
+- `db-integration`: PostgreSQL 16 sebagai service container (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, lalu `pnpm core:test:integration` (tes API Tenant & Auth).
 
 ## Konvensi
 

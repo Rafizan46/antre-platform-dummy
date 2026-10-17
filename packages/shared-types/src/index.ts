@@ -1,3 +1,5 @@
-// @antre/shared-types: shared status enums and roles (spec section 6.3).
-// Contract contents are added in the shared-library workstream.
-export {};
+// @antre/shared-types: shared enums, state transitions, API error codes, and DTO schemas.
+export * from './dto.js';
+export * from './enums.js';
+export * from './errors.js';
+export * from './transitions.js';

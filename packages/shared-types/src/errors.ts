@@ -1,0 +1,50 @@
+// API error codes and their HTTP status (spec section 8, general error codes).
+
+export const ERROR_CODES = [
+  'VALIDATION_ERROR',
+  'UNAUTHORIZED',
+  'INVALID_CREDENTIALS',
+  'QUOTA_EXCEEDED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'PAYMENT_TARGET_NOT_FOUND',
+  'ALREADY_EXISTS',
+  'INVALID_TRANSITION',
+  'SLOT_LOCKED',
+  'SLOT_TAKEN',
+  'ACTIVE_TICKET_EXISTS',
+  'MODE_DISABLED',
+  'LOCATION_CLOSED',
+  'PAYMENT_NOT_APPLICABLE',
+  'RATE_LIMITED',
+  'INTERNAL_ERROR',
+] as const;
+export type ErrorCode = (typeof ERROR_CODES)[number];
+
+export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
+  VALIDATION_ERROR: 400,
+  UNAUTHORIZED: 401,
+  INVALID_CREDENTIALS: 401,
+  QUOTA_EXCEEDED: 402,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  PAYMENT_TARGET_NOT_FOUND: 404,
+  ALREADY_EXISTS: 409,
+  INVALID_TRANSITION: 409,
+  SLOT_LOCKED: 409,
+  SLOT_TAKEN: 409,
+  ACTIVE_TICKET_EXISTS: 409,
+  MODE_DISABLED: 409,
+  LOCATION_CLOSED: 409,
+  PAYMENT_NOT_APPLICABLE: 409,
+  RATE_LIMITED: 429,
+  INTERNAL_ERROR: 500,
+};
+
+export interface ApiErrorBody {
+  error: {
+    code: ErrorCode;
+    message: string;
+    details?: unknown;
+  };
+}
