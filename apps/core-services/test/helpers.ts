@@ -10,6 +10,7 @@ import { inject } from 'vitest';
 
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
+import { InMemorySlotLock, RedisSlotLock, type SlotLock } from '../src/booking/slot-lock.js';
 import { withTransaction } from '../src/db/transaction.js';
 import { InMemoryEventPublisher } from '../src/events/publisher.js';
 
@@ -22,26 +23,43 @@ export interface TestApp {
   jwtSecret: string;
   /** Service token of the WhatsApp Channel Service for /internal/v1. */
   waChannelToken: string;
+  /** HMAC secret of the QRIS payment callback. */
+  paymentCallbackSecret: string;
+  /** The slot lock the app uses (in memory unless a test passes another). */
+  slotLock: SlotLock;
   /** Events published after commits. */
   events: InMemoryEventPublisher;
   close: () => Promise<void>;
 }
 
-export async function createTestApp(options: { now?: () => Date } = {}): Promise<TestApp> {
+export async function createTestApp(
+  options: { now?: () => Date; slotLock?: SlotLock } = {},
+): Promise<TestApp> {
   const urls = inject('databaseUrls');
   const pool = new pg.Pool({ connectionString: urls.app, max: 10 });
-  const { jwtSecret, waChannelToken } = loadConfig({
+  const { jwtSecret, waChannelToken, paymentCallbackSecret } = loadConfig({
     ...process.env,
     DATABASE_APP_URL: urls.app,
   });
   const events = new InMemoryEventPublisher();
-  const app = buildApp({ pool, jwtSecret, waChannelToken, events, now: options.now });
+  const slotLock = options.slotLock ?? new InMemorySlotLock();
+  const app = buildApp({
+    pool,
+    jwtSecret,
+    waChannelToken,
+    slotLock,
+    paymentCallbackSecret,
+    events,
+    now: options.now,
+  });
   await app.ready();
   return {
     app,
     pool,
     jwtSecret,
     waChannelToken,
+    paymentCallbackSecret,
+    slotLock,
     events,
     close: async () => {
       await app.close();
@@ -259,4 +277,107 @@ export async function setupQueueFixture(ctx: TestApp): Promise<QueueFixture> {
 /** Events of one type published so far. */
 export function eventsOfType(ctx: TestApp, type: EventEnvelope['event_type']): EventEnvelope[] {
   return ctx.events.events.filter((event) => event.event_type === type);
+}
+
+/** A Redis slot lock on REDIS_URL (the compose Redis, or the CI service); call close() afterwards. */
+export async function redisSlotLock(): Promise<RedisSlotLock> {
+  const url = process.env.REDIS_URL;
+  if (!url)
+    throw new Error('REDIS_URL is not set; run the tests with "pnpm core:test:integration".');
+  const lock = new RedisSlotLock({ url, log: { warn: () => {} } });
+  await lock.connect();
+  return lock;
+}
+
+export interface BookingFixture {
+  tenant: RegisteredTenant;
+  locationId: string;
+  /** Service with a 50000 down payment, and one without; both served by both resources. */
+  dpServiceId: string;
+  freeServiceId: string;
+  /** Resources in name order: "Ruang A", "Ruang B". */
+  resourceIds: [string, string];
+  owner: Record<string, string>;
+  caller: Record<string, string>;
+  cashier: Record<string, string>;
+}
+
+export const DP_AMOUNT = 50000;
+
+/**
+ * A tenant in service mode BOTH with one location open all week 00:00-23:59 (60 minute slots),
+ * a DP service and a non-DP service, two resources serving both, and owner, caller, and cashier.
+ */
+export async function setupBookingFixture(ctx: TestApp): Promise<BookingFixture> {
+  const tenant = await registerTenant(ctx.app);
+  const callerEmail = `caller-${randomUUID().slice(0, 8)}@example.test`;
+  const cashierEmail = `cashier-${randomUUID().slice(0, 8)}@example.test`;
+  const owner = bearer(await login(ctx.app, tenant.ownerEmail, tenant.password));
+
+  for (const [role, email] of [
+    ['STAFF_CALLER', callerEmail],
+    ['STAFF_CASHIER', cashierEmail],
+  ] as const) {
+    const response = await apiRequest(ctx.app, 'POST', '/api/v1/users', owner, {
+      email,
+      password: DEFAULT_PASSWORD,
+      role,
+    });
+    if (response.statusCode !== 201) throw new Error(`staff failed: ${response.body}`);
+  }
+
+  const locations = await apiRequest(ctx.app, 'GET', '/api/v1/locations', owner);
+  const locationId = locations.json<{ locations: LocationDto[] }>().locations[0]!.id;
+
+  const hours = await apiRequest(
+    ctx.app,
+    'PUT',
+    `/api/v1/catalog/locations/${locationId}/operating-hours`,
+    owner,
+    { slot_interval_min: 60, days: ALL_WEEK },
+  );
+  if (hours.statusCode !== 200) throw new Error(`hours failed: ${hours.body}`);
+
+  const createService = async (body: object): Promise<string> => {
+    const response = await apiRequest(ctx.app, 'POST', '/api/v1/catalog/services', owner, body);
+    if (response.statusCode !== 201) throw new Error(`service failed: ${response.body}`);
+    return response.json<{ id: string }>().id;
+  };
+  const dpServiceId = await createService({
+    name: 'Konsultasi DP',
+    ticket_prefix: 'B',
+    avg_duration_min: 60,
+    requires_dp: true,
+    dp_amount: DP_AMOUNT,
+  });
+  const freeServiceId = await createService({
+    name: 'Konsultasi',
+    ticket_prefix: 'N',
+    avg_duration_min: 60,
+  });
+
+  const createResource = async (name: string): Promise<string> => {
+    const response = await apiRequest(ctx.app, 'POST', '/api/v1/catalog/resources', owner, {
+      location_id: locationId,
+      name,
+      service_ids: [dpServiceId, freeServiceId],
+    });
+    if (response.statusCode !== 201) throw new Error(`resource failed: ${response.body}`);
+    return response.json<{ id: string }>().id;
+  };
+  const resourceIds: [string, string] = [
+    await createResource('Ruang A'),
+    await createResource('Ruang B'),
+  ];
+
+  return {
+    tenant,
+    locationId,
+    dpServiceId,
+    freeServiceId,
+    resourceIds,
+    owner,
+    caller: bearer(await login(ctx.app, callerEmail, DEFAULT_PASSWORD)),
+    cashier: bearer(await login(ctx.app, cashierEmail, DEFAULT_PASSWORD)),
+  };
 }

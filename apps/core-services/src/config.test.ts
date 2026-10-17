@@ -4,10 +4,14 @@ import { loadConfig } from './config.js';
 
 const SECRET = 'a-valid-secret-of-at-least-32-characters-long';
 const TOKEN = 'a-valid-service-token-of-at-least-32-chars';
+const PAYMENT_SECRET = 'a-valid-payment-secret-of-at-least-32-chars';
+const REDIS_URL = 'redis://127.0.0.1:6379';
 const BASE = {
   DATABASE_APP_URL: 'postgres://x',
   JWT_SECRET: SECRET,
   WA_CHANNEL_SERVICE_TOKEN: TOKEN,
+  PAYMENT_CALLBACK_SECRET: PAYMENT_SECRET,
+  REDIS_URL,
 };
 
 describe('loadConfig', () => {
@@ -16,6 +20,8 @@ describe('loadConfig', () => {
       databaseUrl: 'postgres://x',
       jwtSecret: SECRET,
       waChannelToken: TOKEN,
+      redisUrl: REDIS_URL,
+      paymentCallbackSecret: PAYMENT_SECRET,
       host: '127.0.0.1',
       port: 3000,
     });
@@ -46,11 +52,31 @@ describe('loadConfig', () => {
     expect(() => loadConfig(withoutSecret)).toThrow('JWT_SECRET');
     expect(() => loadConfig({ ...BASE, JWT_SECRET: '' })).toThrow('JWT_SECRET');
     expect(() => loadConfig(withoutToken)).toThrow('WA_CHANNEL_SERVICE_TOKEN');
+    const { PAYMENT_CALLBACK_SECRET, REDIS_URL: redis, ...rest } = BASE;
+    expect(PAYMENT_CALLBACK_SECRET && redis).toBeTruthy();
+    expect(() => loadConfig({ ...rest, REDIS_URL })).toThrow('PAYMENT_CALLBACK_SECRET');
+    expect(() => loadConfig({ ...rest, PAYMENT_CALLBACK_SECRET: PAYMENT_SECRET })).toThrow(
+      'REDIS_URL',
+    );
+  });
+
+  it('requires a redis:// or rediss:// URL without echoing it', () => {
+    const bad = 'http://secret-host:6379';
+    try {
+      loadConfig({ ...BASE, REDIS_URL: bad });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as Error).message).toContain('REDIS_URL');
+      expect((error as Error).message).not.toContain(bad);
+    }
+    expect(loadConfig({ ...BASE, REDIS_URL: 'rediss://cache:6380' }).redisUrl).toBe(
+      'rediss://cache:6380',
+    );
   });
 
   it('rejects a short secret or token without echoing it', () => {
     const short = 'short-secret-value';
-    for (const name of ['JWT_SECRET', 'WA_CHANNEL_SERVICE_TOKEN']) {
+    for (const name of ['JWT_SECRET', 'WA_CHANNEL_SERVICE_TOKEN', 'PAYMENT_CALLBACK_SECRET']) {
       try {
         loadConfig({ ...BASE, [name]: short });
         expect.unreachable();
@@ -69,6 +95,10 @@ describe('loadConfig', () => {
     );
     expect(() =>
       loadConfig({ ...BASE, WA_CHANNEL_SERVICE_TOKEN: token, NODE_ENV: 'production' }),
+    ).toThrow('production');
+    const paymentSecret = 'dev-only-payment-callback-secret-not-for-prod-01';
+    expect(() =>
+      loadConfig({ ...BASE, PAYMENT_CALLBACK_SECRET: paymentSecret, NODE_ENV: 'production' }),
     ).toThrow('production');
     const dev = { ...BASE, JWT_SECRET: secret, WA_CHANNEL_SERVICE_TOKEN: token };
     expect(loadConfig({ ...dev, NODE_ENV: 'development' }).jwtSecret).toBe(secret);

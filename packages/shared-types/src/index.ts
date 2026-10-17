@@ -1,4 +1,5 @@
 // @antre/shared-types: shared enums, state transitions, API error codes, and DTO schemas.
+export * from './booking.js';
 export * from './catalog.js';
 export * from './dto.js';
 export * from './enums.js';

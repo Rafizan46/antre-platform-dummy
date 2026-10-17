@@ -68,6 +68,17 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        # Same image as docker-compose.dev.yml; host port 36379 matches REDIS_URL in .env.example
+        # (booking slot locks in the core services integration tests).
+        image: redis:8.10.2-alpine
+        ports:
+          - 36379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7

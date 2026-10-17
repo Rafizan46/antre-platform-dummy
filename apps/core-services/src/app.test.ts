@@ -2,6 +2,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildApp } from './app.js';
+import { InMemorySlotLock } from './booking/slot-lock.js';
 
 // The pool never connects: every request below is answered before any query.
 const pool = new pg.Pool({ connectionString: 'postgres://u:p@127.0.0.1:1/x' });
@@ -9,6 +10,8 @@ const app = buildApp({
   pool,
   jwtSecret: 'a-valid-secret-of-at-least-32-characters-long',
   waChannelToken: 'a-valid-service-token-of-at-least-32-chars',
+  slotLock: new InMemorySlotLock(),
+  paymentCallbackSecret: 'a-valid-payment-secret-of-at-least-32-chars',
 });
 
 beforeAll(async () => {

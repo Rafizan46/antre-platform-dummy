@@ -5,6 +5,10 @@ export interface CoreConfig {
   jwtSecret: string;
   /** Static service token of the WhatsApp Channel Service for /internal/v1. */
   waChannelToken: string;
+  /** Redis for the booking slot locks (redis:// or rediss://). */
+  redisUrl: string;
+  /** HMAC secret that signs the QRIS payment callback (spec section 7.4). */
+  paymentCallbackSecret: string;
   host: string;
   port: number;
 }
@@ -27,6 +31,16 @@ function readSecret(env: NodeJS.ProcessEnv, name: string): string {
   return value;
 }
 
+function readRedisUrl(value: string | undefined): string {
+  if (!value) {
+    throw new Error('REDIS_URL is not set');
+  }
+  if (!value.startsWith('redis://') && !value.startsWith('rediss://')) {
+    throw new Error('REDIS_URL must start with redis:// or rediss://');
+  }
+  return value;
+}
+
 function readPort(value: string | undefined): number {
   if (value === undefined || value === '') return DEFAULT_PORT;
   const port = Number(value);
@@ -44,11 +58,15 @@ export function loadConfig(env: NodeJS.ProcessEnv): CoreConfig {
 
   const jwtSecret = readSecret(env, 'JWT_SECRET');
   const waChannelToken = readSecret(env, 'WA_CHANNEL_SERVICE_TOKEN');
+  const paymentCallbackSecret = readSecret(env, 'PAYMENT_CALLBACK_SECRET');
+  const redisUrl = readRedisUrl(env.REDIS_URL);
 
   return {
     databaseUrl,
     jwtSecret,
     waChannelToken,
+    redisUrl,
+    paymentCallbackSecret,
     host: env.CORE_SERVICES_HOST || DEFAULT_HOST,
     port: readPort(env.CORE_SERVICES_PORT),
   };

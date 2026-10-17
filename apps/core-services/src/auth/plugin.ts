@@ -4,6 +4,7 @@ import type { TenantRole } from '@antre/shared-types';
 import type { FastifyRequest } from 'fastify';
 import type pg from 'pg';
 
+import type { SlotLock } from '../booking/slot-lock.js';
 import { withTransaction } from '../db/transaction.js';
 import { AppError } from '../errors.js';
 import type { EventPublisher } from '../events/publisher.js';
@@ -20,6 +21,10 @@ export interface AppDeps {
   events: EventPublisher;
   /** Static service token of the WhatsApp Channel Service (/internal/v1). */
   waChannelToken: string;
+  /** Redis seam for the booking slot locks (spec section 7.2). */
+  slotLock: SlotLock;
+  /** HMAC secret of the QRIS payment callback (spec section 7.4). */
+  paymentCallbackSecret: string;
 }
 
 declare module 'fastify' {

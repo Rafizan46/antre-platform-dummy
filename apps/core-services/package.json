@@ -15,6 +15,7 @@
   "dependencies": {
     "@antre/event-contracts": "workspace:*",
     "@antre/shared-types": "workspace:*",
+    "@redis/client": "catalog:",
     "fastify": "catalog:",
     "jose": "catalog:",
     "pg": "catalog:",

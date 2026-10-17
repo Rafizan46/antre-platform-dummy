@@ -13,6 +13,7 @@ import {
 import type pg from 'pg';
 
 import type { AppDeps } from '../auth/plugin.js';
+import { quotaThresholdEvents } from '../billing/quota.js';
 import { AppError, uniqueViolationConstraint } from '../errors.js';
 import { publishAll } from '../events/publisher.js';
 import {
@@ -28,7 +29,6 @@ import {
   insertTicket,
   lockQueue,
   markNearTurn,
-  markQuotaNotified,
   nextSequence,
   reserveQuota,
   selectTickets,
@@ -39,7 +39,6 @@ import {
 } from './queries.js';
 
 const NEAR_TURN_MAX_AHEAD = 2;
-const QUOTA_WARNING_RATIO = 0.8;
 const MS_PER_MINUTE = 60_000;
 
 export interface QueueEnv {
@@ -329,38 +328,16 @@ export async function createTicket(
     ),
   ];
 
-  if (quota.monthly_ticket_quota !== null) {
-    const quotaData = {
-      admin_wa_phone: context.admin_wa_phone,
-      plan_code: 'FREE' as const,
-      period_month: context.period_month,
-      ticket_count: quota.ticket_count,
-      monthly_ticket_quota: quota.monthly_ticket_quota,
-    };
-    if (
-      quota.warning_sent_at === null &&
-      quota.ticket_count >= Math.ceil(QUOTA_WARNING_RATIO * quota.monthly_ticket_quota)
-    ) {
-      await markQuotaNotified(client, 'warning', context.id, context.period_month, now);
-      events.push(
-        createEvent(
-          'billing.quota.warning',
-          { ...eventScope(env, context), data: quotaData },
-          { now: env.now },
-        ),
-      );
-    }
-    if (quota.exceeded_sent_at === null && quota.ticket_count >= quota.monthly_ticket_quota) {
-      await markQuotaNotified(client, 'exceeded', context.id, context.period_month, now);
-      events.push(
-        createEvent(
-          'billing.quota.exceeded',
-          { ...eventScope(env, context), data: quotaData },
-          { now: env.now },
-        ),
-      );
-    }
-  }
+  events.push(
+    ...(await quotaThresholdEvents(client, {
+      scope: eventScope(env, context),
+      adminWaPhone: context.admin_wa_phone,
+      locationId: context.id,
+      periodMonth: context.period_month,
+      quota,
+      now: env.now,
+    })),
+  );
 
   return { result: dto, events };
 }
