@@ -4,20 +4,20 @@ Monorepo platform SaaS antrean virtual dan reservasi slot multi-tenant untuk UMK
 
 ## Struktur
 
-| Path                       | Isi                                                               | Status         |
-| -------------------------- | ----------------------------------------------------------------- | -------------- |
-| `apps/gateway`             | Konfigurasi API Gateway Traefik (bukan paket Node)                | placeholder    |
-| `apps/core-services`       | Tenant & Auth, Catalog, Queue (Fastify)                           | aktif          |
-| `apps/wa-channel`          | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)   | aktif          |
-| `apps/realtime-gateway`    | Realtime SSE Gateway (Fastify)                                    | aktif          |
-| `apps/notification-worker` | Konsumer RabbitMQ pengirim pesan WhatsApp                         | aktif          |
-| `apps/web-staff`           | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite) | Kiosk TV aktif |
-| `packages/shared-types`    | `@antre/shared-types`: enum status dan role                       | aktif          |
-| `packages/event-contracts` | `@antre/event-contracts`: envelope dan katalog event              | aktif          |
-| `packages/messaging`       | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event   | aktif          |
-| `packages/db`              | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS     | aktif          |
-| `infra/k8s`                | Manifest k3s                                                      | placeholder    |
-| `.github/workflows`        | CI GitHub Actions                                                 | aktif          |
+| Path                       | Isi                                                               | Status                                  |
+| -------------------------- | ----------------------------------------------------------------- | --------------------------------------- |
+| `apps/gateway`             | Konfigurasi API Gateway Traefik (bukan paket Node)                | placeholder                             |
+| `apps/core-services`       | Tenant & Auth, Catalog, Queue (Fastify)                           | aktif                                   |
+| `apps/wa-channel`          | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)   | aktif                                   |
+| `apps/realtime-gateway`    | Realtime SSE Gateway (Fastify)                                    | aktif                                   |
+| `apps/notification-worker` | Konsumer RabbitMQ pengirim pesan WhatsApp                         | aktif                                   |
+| `apps/web-staff`           | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite) | Dashboard staf/owner dan Kiosk TV aktif |
+| `packages/shared-types`    | `@antre/shared-types`: enum status dan role                       | aktif                                   |
+| `packages/event-contracts` | `@antre/event-contracts`: envelope dan katalog event              | aktif                                   |
+| `packages/messaging`       | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event   | aktif                                   |
+| `packages/db`              | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS     | aktif                                   |
+| `infra/k8s`                | Manifest k3s                                                      | placeholder                             |
+| `.github/workflows`        | CI GitHub Actions                                                 | aktif                                   |
 
 ## Prasyarat
 
@@ -220,6 +220,12 @@ pnpm rt:test:integration                      # core-services tertanam + Postgre
 ```
 
 `pnpm rt:test:integration` membuat database `antre_it_rt` dan memakai Redis database 12 (kunci `rt:*` dan `lock:slot:*` dihapus sebelum dan sesudah).
+
+### Web staf/owner (`apps/web-staff`)
+
+Aplikasi React untuk staf dan owner (pelanggan hanya lewat WhatsApp): login (JWT di memori dan `sessionStorage`, bukan `localStorage`; sesi berakhir saat token kedaluwarsa atau API membalas 401), pendaftaran tenant (`#/daftar`), dashboard operasional (`#/`: pilih lokasi, tiket per layanan, CALL_NEXT/RECALL/SERVE/COMPLETE/NO_SHOW sesuai role dan transisi sah, tiket manual untuk OWNER dan STAFF_CASHIER, reservasi hari ini, ringkasan menunggu/dilayani/selesai/rata-rata durasi, pembaruan live lewat SSE dengan reconnect otomatis) dan pengaturan owner (`#/pengaturan/<tab>`: layanan, resource beserta relasi layanan, jam operasional, mode layanan dan branding, staf, token kiosk, langganan dan kuota). Router hash buatan sendiri; dashboard, pengaturan, dan pendaftaran dimuat lazy (bundel awal ~110 KB, ~33 KB gzip). Tes memakai Vitest, jsdom, dan Testing Library.
+
+Menjalankan: jalankan core-services (3000) dan realtime-gateway (3300), lalu `pnpm --filter @antre/web-staff dev` (http://localhost:5173). Dev dan `vite preview` mem-proxy `/api/v1/realtime` ke `REALTIME_PROXY_TARGET` (default `http://127.0.0.1:3300`) dan `/api` ke `API_PROXY_TARGET` (default `http://127.0.0.1:3000`) sehingga tanpa CORS. Env build: `VITE_API_URL` (origin API bila beda dari halaman; default origin yang sama) dan `VITE_REALTIME_URL` (origin gateway SSE; default origin yang sama). Tidak ada secret di bundel.
 
 ### Kiosk TV (`apps/web-staff/kiosk.html`)
 
