@@ -1,0 +1,30 @@
+{
+  "name": "@antre/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./testing": "./test/database.ts"
+  },
+  "scripts": {
+    "db:bootstrap": "node --env-file=../../.env.example --env-file-if-exists=../../.env ./node_modules/node-pg-migrate/bin/node-pg-migrate.js up --migrations-dir bootstrap --migrations-table pgmigrations_bootstrap --database-url-var DATABASE_ADMIN_URL --no-verbose",
+    "db:migrate": "node --env-file=../../.env.example --env-file-if-exists=../../.env ./node_modules/node-pg-migrate/bin/node-pg-migrate.js up --migrations-dir migrations --database-url-var DATABASE_MIGRATOR_URL --no-verbose",
+    "db:migrate:down": "node --env-file=../../.env.example --env-file-if-exists=../../.env ./node_modules/node-pg-migrate/bin/node-pg-migrate.js down --migrations-dir migrations --database-url-var DATABASE_MIGRATOR_URL --no-verbose",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:integration": "node --env-file=../../.env.example --env-file-if-exists=../../.env ./node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "node-pg-migrate": "catalog:",
+    "pg": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

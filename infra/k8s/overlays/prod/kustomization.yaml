@@ -1,0 +1,31 @@
+# Production overlay (k3s with managed PostgreSQL/Redis/RabbitMQ). Before applying:
+#  1. create the Secret `antre-secrets` (../../secret.template.yaml);
+#  2. replace the image registry/tag below (CI pushes sha-<commit> tags to GHCR);
+#  3. provide the TLS Secret `antre-tls` (or switch the IngressRoute tls to a certResolver);
+#  4. run the db-migrate Job (resource below) and wait for it, then roll out.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - ../../jobs/db-migrate
+
+images:
+  - name: antre/core-services
+    newName: ghcr.io/OWNER/antre-core-services
+    newTag: sha-0000000
+  - name: antre/notification-worker
+    newName: ghcr.io/OWNER/antre-notification-worker
+    newTag: sha-0000000
+  - name: antre/wa-channel
+    newName: ghcr.io/OWNER/antre-wa-channel
+    newTag: sha-0000000
+  - name: antre/realtime-gateway
+    newName: ghcr.io/OWNER/antre-realtime-gateway
+    newTag: sha-0000000
+  - name: antre/web-staff
+    newName: ghcr.io/OWNER/antre-web-staff
+    newTag: sha-0000000
+  - name: antre/db-migrate
+    newName: ghcr.io/OWNER/antre-db-migrate
+    newTag: sha-0000000

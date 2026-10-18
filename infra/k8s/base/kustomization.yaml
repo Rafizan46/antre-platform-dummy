@@ -1,0 +1,23 @@
+# Antre application workloads (spec section 9.1). PostgreSQL, Redis, and RabbitMQ are managed
+# services in production and are NOT part of the base; overlays/dev adds small in-cluster copies.
+# The Secret `antre-secrets` is created outside kustomize (see ../secret.template.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: antre
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - core-services.yaml
+  - notification-worker.yaml
+  - wa-channel.yaml
+  - realtime-gateway.yaml
+  - web-staff.yaml
+  - ingress.yaml
+  - networkpolicy.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: antre
+    includeSelectors: false

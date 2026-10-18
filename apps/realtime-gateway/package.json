@@ -1,0 +1,33 @@
+{
+  "name": "@antre/realtime-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build --ssr src/server.ts --outDir dist --emptyOutDir",
+    "dev": "pnpm build && node --env-file=../../.env.example --env-file-if-exists=../../.env dist/server.js",
+    "lint": "eslint .",
+    "start": "node --env-file-if-exists=../../.env dist/server.js",
+    "test": "vitest run",
+    "test:integration": "node --env-file=../../.env.example --env-file-if-exists=../../.env ./node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@antre/messaging": "workspace:*",
+    "@antre/shared-types": "workspace:*",
+    "@redis/client": "catalog:",
+    "fastify": "catalog:",
+    "jose": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@antre/core-services": "workspace:*",
+    "@antre/db": "workspace:*",
+    "@antre/event-contracts": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

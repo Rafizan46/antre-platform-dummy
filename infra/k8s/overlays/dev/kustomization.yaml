@@ -1,0 +1,69 @@
+# DEV/TEST overlay: single-node k3s or kind with small in-cluster PostgreSQL, Redis, and RabbitMQ.
+# NOT for production (managed services, spec 9.2): no backups, single replicas, and the Secrets are
+# generated below from public placeholder values. Images are the local `:dev` builds
+# (docker build ... -t antre/<name>:dev, then `k3s ctr images import` or `kind load docker-image`).
+#
+#   kubectl apply -k infra/k8s/overlays/dev
+# The db-roles and db-migrate Jobs retry until PostgreSQL accepts connections and the roles exist;
+# the application pods become Ready after the migrations are done.
+# db-roles.sql is a copy of infra/docker/db-roles.sql (kustomize cannot read files outside this
+# directory tree by default); keep both in sync.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - ../../jobs/db-migrate
+  - postgres.yaml
+  - redis.yaml
+  - rabbitmq.yaml
+  - db-roles-job.yaml
+
+configMapGenerator:
+  - name: db-roles-sql
+    files:
+      - db-roles.sql
+    options:
+      disableNameSuffixHash: true
+
+secretGenerator:
+  # In-cluster infrastructure credentials (values are public placeholders: dev only).
+  - name: antre-dev-infra
+    literals:
+      - POSTGRES_PASSWORD=k8s-dev-postgres-password-0001
+      - ANTRE_MIGRATOR_PASSWORD=k8s-dev-migrator-password-0001
+      - ANTRE_APP_PASSWORD=k8s-dev-app-password-0001
+      - ANTRE_PLATFORM_ADMIN_PASSWORD=k8s-dev-admin-password-0001
+      - REDIS_PASSWORD=k8s-dev-redis-password-0001
+      - RABBITMQ_USER=antre
+      - RABBITMQ_PASSWORD=k8s-dev-rabbitmq-password-0001
+    options:
+      disableNameSuffixHash: true
+  # The application Secret (same keys as ../../secret.template.yaml). Values must not start with
+  # "dev-only": NODE_ENV=production refuses those.
+  - name: antre-secrets
+    literals:
+      - JWT_SECRET=k8s-dev-jwt-secret-not-for-production-0001
+      - WA_CHANNEL_SERVICE_TOKEN=k8s-dev-wa-channel-token-not-for-prod-01
+      - PAYMENT_CALLBACK_SECRET=k8s-dev-payment-callback-secret-not-for-prod
+      - WA_APP_SECRET=k8s-dev-wa-app-secret-not-for-production
+      - WA_VERIFY_TOKEN=k8s-dev-wa-verify-token-0001
+      - DATABASE_APP_URL=postgres://antre_app:k8s-dev-app-password-0001@postgres:5432/antre
+      - DATABASE_PLATFORM_ADMIN_URL=postgres://antre_platform_admin:k8s-dev-admin-password-0001@postgres:5432/antre
+      - DATABASE_MIGRATOR_URL=postgres://antre_migrator:k8s-dev-migrator-password-0001@postgres:5432/antre
+      - REDIS_URL=redis://:k8s-dev-redis-password-0001@redis:6379
+      - RABBITMQ_URL=amqp://antre:k8s-dev-rabbitmq-password-0001@rabbitmq:5672
+      - META_WA_ACCESS_TOKEN=
+    options:
+      disableNameSuffixHash: true
+
+patches:
+  # The in-cluster PostgreSQL and RabbitMQ images start as root, which the restricted Pod Security
+  # profile forbids; the dev namespace enforces baseline instead.
+  - target:
+      kind: Namespace
+      name: antre
+    patch: |-
+      - op: replace
+        path: /metadata/labels/pod-security.kubernetes.io~1enforce
+        value: baseline

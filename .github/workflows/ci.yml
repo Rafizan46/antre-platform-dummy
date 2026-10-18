@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format, lint, typecheck, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable pnpm (Corepack, version from packageManager)
+        run: corepack enable pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Build core-services
+        run: pnpm --filter @antre/core-services build
+
+      - name: Build notification-worker
+        run: pnpm --filter @antre/notification-worker build
+
+      - name: Build wa-channel
+        run: pnpm --filter @antre/wa-channel build
+
+      - name: Build realtime-gateway
+        run: pnpm --filter @antre/realtime-gateway build
+
+      - name: Build web-staff (dashboard and Kiosk TV)
+        run: pnpm --filter @antre/web-staff build
+
+  db-integration:
+    name: Database, API, and messaging integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    services:
+      postgres:
+        # Same image and dev-only credentials as docker-compose.dev.yml; host port 35432 matches
+        # the DATABASE_*_URL defaults in .env.example, so no extra variables are needed.
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_dev
+          POSTGRES_DB: antre
+        ports:
+          - 35432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d antre"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        # Same image as docker-compose.dev.yml; host port 36379 matches REDIS_URL in .env.example
+        # (booking slot locks in the core services tests; WA sessions in Redis database 13; realtime
+        # rt:* keys in database 12).
+        image: redis:8.10.2-alpine
+        ports:
+          - 36379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      rabbitmq:
+        # Same image and dev-only credentials as docker-compose.dev.yml; host ports 35672 (AMQP) and
+        # 45672 (management API, used by the tests to create a temporary vhost) match RABBITMQ_URL
+        # and RABBITMQ_MANAGEMENT_URL in .env.example.
+        image: rabbitmq:4.3.6-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: antre
+          RABBITMQ_DEFAULT_PASS: rabbitmq_dev
+        ports:
+          - 35672:5672
+          - 45672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable pnpm (Corepack, version from packageManager)
+        run: corepack enable pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap roles and apply migrations
+        run: pnpm db:setup
+
+      - name: Roll back the last migration and apply it again
+        run: pnpm db:migrate:down && pnpm db:migrate
+
+      - name: Integration tests
+        run: pnpm db:test:integration
+
+      - name: Core services integration tests
+        run: pnpm core:test:integration
+
+      - name: Notification worker integration tests (PostgreSQL + RabbitMQ)
+        run: pnpm notif:test:integration
+
+      - name: WA Channel integration tests (core services + PostgreSQL + Redis + RabbitMQ)
+        run: pnpm wa:test:integration
+
+      - name: Realtime gateway integration tests (core services + PostgreSQL + Redis)
+        run: pnpm rt:test:integration
+
+  images:
+    name: Build Docker images (no push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - core-services
+          - notification-worker
+          - wa-channel
+          - realtime-gateway
+          - web-staff
+          - db-migrate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.target }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          target: ${{ matrix.target }}
+          push: false
+          tags: antre/${{ matrix.target }}:ci
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,scope=${{ matrix.target }},mode=max
+
+  manifests:
+    name: Validate Kubernetes manifests and compose files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Render kustomize overlays and validate with kubeconform
+        run: |
+          set -euo pipefail
+          for overlay in base overlays/dev overlays/prod; do
+            echo "== $overlay"
+            kubectl kustomize "infra/k8s/$overlay" \
+              | docker run --rm -i ghcr.io/yannh/kubeconform:latest -strict -summary \
+                  -kubernetes-version 1.32.0 \
+                  -schema-location default \
+                  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -
+          done
+
+      - name: Validate compose files
+        run: |
+          docker compose -f docker-compose.dev.yml config --quiet
+          docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+
+      - name: Check that the dev-roles copy is in sync
+        run: diff infra/docker/db-roles.sql infra/k8s/overlays/dev/db-roles.sql

@@ -1,0 +1,38 @@
+packages:
+  - 'apps/*'
+  # apps/gateway holds Traefik configuration, not a Node package.
+  - '!apps/gateway'
+  - 'packages/*'
+
+# Exact versions shared by every workspace package ("catalog:" in package.json).
+catalog:
+  '@eslint/js': 10.0.1
+  '@redis/client': 6.3.0
+  '@testing-library/dom': 10.4.2
+  '@testing-library/react': 16.3.3
+  '@types/node': 22.20.5
+  '@types/pg': 8.23.1
+  '@types/react': 19.3.0
+  '@types/react-dom': 19.3.0
+  '@vitejs/plugin-react': 6.1.2
+  amqplib: 2.2.0
+  eslint: 10.12.0
+  eslint-config-prettier: 10.1.8
+  fastify: 5.12.7
+  jsdom: 29.1.1
+  jose: 6.2.12
+  node-pg-migrate: 9.0.0
+  pg: 8.23.1
+  prettier: 3.9.10
+  react: 19.3.1
+  react-dom: 19.3.1
+  # typescript-eslint 8.71.2 supports typescript >=4.8.4 <6.1.0, so TypeScript 7 is not used yet.
+  typescript: 6.0.3
+  typescript-eslint: 8.71.2
+  vite: 8.3.4
+  vitest: 5.0.5
+  zod: 4.6.7
+
+# fsevents (macOS-only optional dependency of vite) ships a prebuilt binary; its build script is not needed.
+allowBuilds:
+  fsevents: false

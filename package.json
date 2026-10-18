@@ -1,0 +1,32 @@
+{
+  "name": "antre-platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.28.6",
+  "engines": {
+    "node": "^22.13.0"
+  },
+  "scripts": {
+    "db:bootstrap": "pnpm --filter @antre/db db:bootstrap",
+    "db:migrate": "pnpm --filter @antre/db db:migrate",
+    "db:migrate:down": "pnpm --filter @antre/db db:migrate:down",
+    "db:setup": "pnpm db:bootstrap && pnpm db:migrate",
+    "core:test:integration": "pnpm --filter @antre/core-services test:integration",
+    "db:test:integration": "pnpm --filter @antre/db test:integration",
+    "notif:test:integration": "pnpm --filter @antre/notification-worker test:integration",
+    "wa:test:integration": "pnpm --filter @antre/wa-channel test:integration",
+    "rt:test:integration": "pnpm --filter @antre/realtime-gateway test:integration",
+    "wa": "node scripts/wa.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
+  }
+}

@@ -1,0 +1,128 @@
+# Traefik dynamic configuration: the routing table of the Antre gateway (spec section 5.1).
+#
+# Only the routers listed here are reachable from outside. There is deliberately NO router for
+# /internal/*, /healthz, /readyz, or /metrics: those requests answer 404 at the gateway. The
+# services also verify JWT/service tokens themselves; forward-auth and per-tenant rate limiting at
+# the gateway are not implemented yet (README, Deploy, Keterbatasan).
+http:
+  routers:
+    # Brute-force guard for the unauthenticated auth endpoints (per client IP).
+    auth-limited:
+      rule: 'Path(`/api/v1/auth/login`) || Path(`/api/v1/auth/register`)'
+      priority: 300
+      entryPoints: [web, websecure]
+      middlewares: [secure-headers, rate-limit-auth]
+      service: core-services
+
+    core-services:
+      rule: 'PathRegexp(`^/api/v1/(auth|users|catalog|locations|queues|bookings|billing|tenants|admin|payments)(/|$)`)'
+      priority: 200
+      entryPoints: [web, websecure]
+      middlewares: [secure-headers, rate-limit-api]
+      service: core-services
+
+    # SSE: the realtime gateway streams events, so no compression or buffering middleware is
+    # attached (Traefik flushes text/event-stream immediately) and the entry points have no write timeout.
+    realtime-gateway:
+      rule: 'PathRegexp(`^/api/v1/realtime(/|$)`)'
+      priority: 200
+      entryPoints: [web, websecure]
+      middlewares: [secure-headers, rate-limit-api]
+      service: realtime-gateway
+
+    # Meta Cloud API webhook (GET verification and POST events). The spec exempts the webhook from
+    # rate limiting because Meta sends from few IPs; a high flood guard is kept as a safety net.
+    wa-channel:
+      rule: 'PathPrefix(`/api/v1/channels/wa/`)'
+      priority: 200
+      entryPoints: [web, websecure]
+      middlewares: [secure-headers, rate-limit-webhook]
+      service: wa-channel
+
+    # Static staff dashboard and Kiosk TV. Allow-list instead of a catch-all so that every other
+    # path (including /internal/*) is a gateway 404.
+    web-staff:
+      rule: 'Path(`/`) || Path(`/index.html`) || Path(`/kiosk.html`) || PathPrefix(`/assets/`)'
+      priority: 100
+      entryPoints: [web, websecure]
+      middlewares: [secure-headers, web-csp]
+      service: web-staff
+
+  middlewares:
+    secure-headers:
+      headers:
+        # HSTS is only sent on HTTPS responses.
+        stsSeconds: 63072000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: no-referrer
+        permissionsPolicy: 'camera=(), microphone=(), geolocation=(), payment=()'
+        customResponseHeaders:
+          Server: ''
+          X-Powered-By: ''
+
+    # Static pages only: script-src has no inline script allowance; style-src allows the inline
+    # style attributes React renders.
+    web-csp:
+      headers:
+        contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+
+    # Per client IP (behind a load balancer set ipStrategy.depth or excludedIPs). 30 requests per
+    # minute with a burst of 10 for login/register.
+    rate-limit-auth:
+      rateLimit:
+        average: 30
+        period: 1m
+        burst: 10
+
+    rate-limit-api:
+      rateLimit:
+        average: 200
+        period: 1s
+        burst: 400
+
+    rate-limit-webhook:
+      rateLimit:
+        average: 300
+        period: 1s
+        burst: 600
+
+  services:
+    # healthCheck removes a server from rotation while it fails, so a dead service answers 503
+    # at the gateway instead of hanging. Core exposes /healthz only; the others also have /readyz.
+    core-services:
+      loadBalancer:
+        servers:
+          - url: 'http://core-services:3000'
+        healthCheck:
+          path: /healthz
+          interval: 5s
+          timeout: 3s
+
+    realtime-gateway:
+      loadBalancer:
+        servers:
+          - url: 'http://realtime-gateway:3300'
+        healthCheck:
+          path: /readyz
+          interval: 5s
+          timeout: 3s
+
+    wa-channel:
+      loadBalancer:
+        servers:
+          - url: 'http://wa-channel:3200'
+        healthCheck:
+          path: /readyz
+          interval: 5s
+          timeout: 3s
+
+    web-staff:
+      loadBalancer:
+        servers:
+          - url: 'http://web-staff:8080'
+        healthCheck:
+          path: /healthz
+          interval: 10s
+          timeout: 3s
