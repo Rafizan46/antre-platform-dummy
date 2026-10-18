@@ -1,0 +1,73 @@
+# Ingress policies (k3s enforces NetworkPolicy with its embedded kube-router controller).
+# 1) Deny all ingress in the namespace by default.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# 2) Only the Traefik gateway (kube-system) reaches the public-facing services. Together with the
+#    IngressRoute allow-list this keeps /internal/v1 off the internet: the only in-cluster caller
+#    of core-services /internal/v1 is wa-channel (next policy).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-to-public-services
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [core-services, realtime-gateway, wa-channel, web-staff]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+---
+# 3) wa-channel calls core-services (/internal/v1) over the service token.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-wa-channel-to-core
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: core-services
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: wa-channel
+      ports:
+        - port: 3000
+---
+# 4) Prometheus (namespace `monitoring`) scrapes /metrics of the Node services.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [core-services, notification-worker, wa-channel, realtime-gateway]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 3000
+        - port: 3100
+        - port: 3200
+        - port: 3300

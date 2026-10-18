@@ -1,0 +1,117 @@
+# Traefik (bundled with k3s, v3) is the API gateway (spec 5.1). Only the routes below are exposed:
+# there is deliberately no route for /internal/*, /healthz, /readyz, or /metrics (404 at the edge).
+# Routes match any host (one Antre per cluster Traefik); add Host(`...`) to every match if the
+# Traefik instance is shared. The TLS Secret name is a placeholder.
+# TLS: either a Secret `antre-tls` (kubernetes.io/tls, e.g. issued by cert-manager) or a Traefik
+# certResolver (ACME) configured on the Traefik install; see README, Deploy.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: antre
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: (Path(`/api/v1/auth/login`) || Path(`/api/v1/auth/register`))
+      priority: 300
+      middlewares: [{ name: secure-headers }, { name: rate-limit-auth }]
+      services: [{ name: core-services, port: 3000 }]
+    - kind: Rule
+      match: PathRegexp(`^/api/v1/(auth|users|catalog|locations|queues|bookings|billing|tenants|admin|payments)(/|$)`)
+      priority: 200
+      middlewares: [{ name: secure-headers }, { name: rate-limit-api }]
+      services: [{ name: core-services, port: 3000 }]
+    # SSE: no compression or buffering middleware; the Traefik entry point must not set a write timeout.
+    - kind: Rule
+      match: PathRegexp(`^/api/v1/realtime(/|$)`)
+      priority: 200
+      middlewares: [{ name: secure-headers }, { name: rate-limit-api }]
+      services: [{ name: realtime-gateway, port: 3300 }]
+    - kind: Rule
+      match: PathPrefix(`/api/v1/channels/wa/`)
+      priority: 200
+      middlewares: [{ name: secure-headers }, { name: rate-limit-webhook }]
+      services: [{ name: wa-channel, port: 3200 }]
+    - kind: Rule
+      match: (Path(`/`) || Path(`/index.html`) || Path(`/kiosk.html`) || PathPrefix(`/assets/`))
+      priority: 100
+      middlewares: [{ name: secure-headers }, { name: web-csp }]
+      services: [{ name: web-staff, port: 8080 }]
+  tls:
+    secretName: antre-tls
+---
+# Plain HTTP only redirects to HTTPS.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: antre-http-redirect
+spec:
+  entryPoints: [web]
+  routes:
+    - kind: Rule
+      match: PathPrefix(`/`)
+      middlewares: [{ name: redirect-https }]
+      services: [{ name: web-staff, port: 8080 }]
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: secure-headers
+spec:
+  headers:
+    stsSeconds: 63072000
+    stsIncludeSubdomains: true
+    contentTypeNosniff: true
+    frameDeny: true
+    referrerPolicy: no-referrer
+    permissionsPolicy: 'camera=(), microphone=(), geolocation=(), payment=()'
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: web-csp
+spec:
+  headers:
+    contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+---
+# Per client IP. Behind a cloud load balancer set ipStrategy.depth (or excludedIPs) to the number
+# of trusted proxies, otherwise every client shares the balancer's address.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit-auth
+spec:
+  rateLimit:
+    average: 30
+    period: 1m
+    burst: 10
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit-api
+spec:
+  rateLimit:
+    average: 200
+    period: 1s
+    burst: 400
+---
+# The spec exempts the Meta webhook from rate limiting; this is only a high flood guard.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit-webhook
+spec:
+  rateLimit:
+    average: 300
+    period: 1s
+    burst: 600

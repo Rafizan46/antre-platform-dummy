@@ -1,0 +1,167 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-services
+  labels:
+    app.kubernetes.io/name: core-services
+spec:
+  # replicas is owned by the HorizontalPodAutoscaler below.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: core-services
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: core-services
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: core-services
+      containers:
+        - name: core-services
+          image: antre/core-services:dev
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: antre-config
+          env:
+            - name: DATABASE_APP_URL
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: DATABASE_APP_URL
+            - name: DATABASE_PLATFORM_ADMIN_URL
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: DATABASE_PLATFORM_ADMIN_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: JWT_SECRET
+            - name: WA_CHANNEL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: WA_CHANNEL_SERVICE_TOKEN
+            - name: PAYMENT_CALLBACK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: PAYMENT_CALLBACK_SECRET
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: REDIS_URL
+            - name: RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: RABBITMQ_URL
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-services
+  labels:
+    app.kubernetes.io/name: core-services
+spec:
+  selector:
+    app.kubernetes.io/name: core-services
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+# NFR-SCAL-01: scale out at 70% average CPU per pod, 1 to 4 replicas. The req/s criterion
+# (> 50 req/s per pod, Prometheus Adapter) and the notifications.wa queue-length criterion
+# (> 100 messages per pod, KEDA or an external-metrics adapter) need components this repo does
+# not install; they are an MVP limitation (README, Deploy).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: core-services
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: core-services
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: core-services
+spec:
+  # With one replica this still lets a node drain (runbook, README); with two or more replicas at
+  # most one is taken down voluntarily at a time.
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: core-services

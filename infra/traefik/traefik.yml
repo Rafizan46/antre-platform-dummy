@@ -1,0 +1,59 @@
+# Traefik v3 static configuration of the prod-like stack (docker-compose.prod.yml).
+# Spec sections 5.1 and 9.1: path routing, TLS, rate limiting, and no exposure of /internal/*.
+# Routing rules live in dynamic/antre.yml. In k3s the same rules are IngressRoutes (infra/k8s).
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+  # Query strings can carry phone numbers and access tokens (EventSource cannot set headers).
+  fields:
+    defaultMode: keep
+    headers:
+      defaultMode: drop
+    names:
+      QueryString: drop
+
+entryPoints:
+  # Plain HTTP for local use. In production terminate TLS at the edge/websecure only and drop this
+  # entry point or turn it into a redirect (see README, Deploy).
+  web:
+    address: ':8000'
+    transport:
+      respondingTimeouts:
+        readTimeout: 30s
+        # 0 = no write deadline, required for long-lived SSE streams (REALTIME_MAX_STREAM_SECONDS).
+        writeTimeout: 0s
+        idleTimeout: 180s
+  # TLS entry point. Without a certificate configured, Traefik serves its built-in self-signed
+  # default certificate (local use). Production: configure an ACME certificatesResolver (README).
+  websecure:
+    address: ':8443'
+    http:
+      tls: {}
+    transport:
+      respondingTimeouts:
+        readTimeout: 30s
+        writeTimeout: 0s
+        idleTimeout: 180s
+  # Health ping only; never published to the host.
+  traefik:
+    address: ':8082'
+
+ping:
+  entryPoint: traefik
+
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: false
+
+# No dashboard or API: the gateway exposes nothing but the routes in dynamic/antre.yml.
+api:
+  dashboard: false
+  insecure: false

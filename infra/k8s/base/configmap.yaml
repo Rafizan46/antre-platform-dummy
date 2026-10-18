@@ -1,0 +1,23 @@
+# Non-secret settings. Secrets (URLs with passwords, signing keys, tokens) live in `antre-secrets`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: antre-config
+data:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  CORE_SERVICES_HOST: 0.0.0.0
+  CORE_SERVICES_PORT: '3000'
+  NOTIFICATION_WORKER_HOST: 0.0.0.0
+  NOTIFICATION_WORKER_PORT: '3100'
+  WA_CHANNEL_HOST: 0.0.0.0
+  WA_CHANNEL_PORT: '3200'
+  REALTIME_HOST: 0.0.0.0
+  REALTIME_PORT: '3300'
+  CORE_SERVICES_URL: http://core-services:3000
+  # sandbox sends nothing to Meta. Use meta together with META_WA_ACCESS_TOKEN (secret) and
+  # META_WA_PHONE_NUMBER_ID below.
+  WA_ADAPTER: sandbox
+  META_WA_PHONE_NUMBER_ID: ''
+  META_WA_API_VERSION: v23.0
+  QRIS_SIMULATOR_URL: ''

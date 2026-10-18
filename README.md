@@ -4,20 +4,20 @@ Monorepo platform SaaS antrean virtual dan reservasi slot multi-tenant untuk UMK
 
 ## Struktur
 
-| Path                       | Isi                                                               | Status                                  |
-| -------------------------- | ----------------------------------------------------------------- | --------------------------------------- |
-| `apps/gateway`             | Konfigurasi API Gateway Traefik (bukan paket Node)                | placeholder                             |
-| `apps/core-services`       | Tenant & Auth, Catalog, Queue (Fastify)                           | aktif                                   |
-| `apps/wa-channel`          | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)   | aktif                                   |
-| `apps/realtime-gateway`    | Realtime SSE Gateway (Fastify)                                    | aktif                                   |
-| `apps/notification-worker` | Konsumer RabbitMQ pengirim pesan WhatsApp                         | aktif                                   |
-| `apps/web-staff`           | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite) | Dashboard staf/owner dan Kiosk TV aktif |
-| `packages/shared-types`    | `@antre/shared-types`: enum status dan role                       | aktif                                   |
-| `packages/event-contracts` | `@antre/event-contracts`: envelope dan katalog event              | aktif                                   |
-| `packages/messaging`       | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event   | aktif                                   |
-| `packages/db`              | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS     | aktif                                   |
-| `infra/k8s`                | Manifest k3s                                                      | placeholder                             |
-| `.github/workflows`        | CI GitHub Actions                                                 | aktif                                   |
+| Path                                         | Isi                                                                     | Status                                  |
+| -------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------- |
+| `apps/gateway`                               | Catatan API Gateway Traefik (konfigurasi: `infra/traefik`, `infra/k8s`) | aktif                                   |
+| `apps/core-services`                         | Tenant & Auth, Catalog, Queue (Fastify)                                 | aktif                                   |
+| `apps/wa-channel`                            | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)         | aktif                                   |
+| `apps/realtime-gateway`                      | Realtime SSE Gateway (Fastify)                                          | aktif                                   |
+| `apps/notification-worker`                   | Konsumer RabbitMQ pengirim pesan WhatsApp                               | aktif                                   |
+| `apps/web-staff`                             | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite)       | Dashboard staf/owner dan Kiosk TV aktif |
+| `packages/shared-types`                      | `@antre/shared-types`: enum status dan role                             | aktif                                   |
+| `packages/event-contracts`                   | `@antre/event-contracts`: envelope dan katalog event                    | aktif                                   |
+| `packages/messaging`                         | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event         | aktif                                   |
+| `packages/db`                                | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS           | aktif                                   |
+| `infra/docker`, `infra/traefik`, `infra/k8s` | Dockerfile multi-stage, gateway Traefik, manifest k3s (kustomize)       | aktif                                   |
+| `.github/workflows`                          | CI GitHub Actions                                                       | aktif                                   |
 
 ## Prasyarat
 
@@ -231,12 +231,115 @@ Menjalankan: jalankan core-services (3000) dan realtime-gateway (3300), lalu `pn
 
 Entry terpisah dari dashboard (bundle JS awal ~227 KB, ~72 KB gzip). Pasang sekali dengan membuka `kiosk.html?token=<token KIOSK_DISPLAY>`: token disimpan di `localStorage` dan dihapus dari address bar; lokasi dibaca dari token. Menampilkan loket/resource dengan nomor yang sedang dipanggil dan 6 panggilan terakhir, update live lewat SSE dengan reconnect otomatis (backoff 1-30 s, melanjutkan dari id terakhir). Setiap panggilan baru (termasuk panggilan ulang) membunyikan chime dua nada (WebAudio, tanpa file audio) lalu TTS bahasa Indonesia (`SpeechSynthesis`, `id-ID`, mis. "Nomor antrean A, dua belas, silakan menuju Loket 1."). Browser hanya mengizinkan audio setelah interaksi: ketuk tombol aktivasi sekali (sekaligus layar penuh), atau jalankan Chromium kiosk dengan `--autoplay-policy=no-user-gesture-required --kiosk`. Dev: `pnpm --filter @antre/web-staff dev` mem-proxy `/api/v1/realtime` ke `127.0.0.1:3300` (`REALTIME_PROXY_TARGET` mengganti target); gateway tidak mengirim header CORS, jadi Kiosk memakai origin yang sama (`VITE_REALTIME_URL` hanya untuk origin yang mengizinkan CORS).
 
+## Deploy (S13)
+
+Semua service dibangun dari satu `infra/docker/Dockerfile` multi-stage (konteks: root repo). Base `node:22.23.3-alpine3.24` dan `nginxinc/nginx-unprivileged:1.30.6-alpine` dipin ke tag minor plus digest (perbarui tag dan digest bersama-sama), pnpm 11.28.6 lewat Corepack, `pnpm install --frozen-lockfile` dengan cache BuildKit, dan `pnpm deploy --prod` memotong tree runtime tanpa devDependencies. Image runtime berjalan sebagai uid 1000 (web-staff uid 101), `NODE_ENV=production`, dengan `HEALTHCHECK`. `.dockerignore` menyingkirkan `docs/`, `.crew/`, `.env*`, `node_modules`, dan manifest.
+
+| Target                | Isi                                                                                                                                                                | Port | Ukuran (disk) |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------------- |
+| `core-services`       | API Tenant & Auth, Catalog, Queue, Booking, Billing, Admin, `/internal/v1`                                                                                         | 3000 | 279 MB        |
+| `notification-worker` | konsumer `notifications.wa`, `/healthz` `/readyz` `/metrics`                                                                                                       | 3100 | 249 MB        |
+| `wa-channel`          | webhook Meta, konsumer `wa.inbound`                                                                                                                                | 3200 | 277 MB        |
+| `realtime-gateway`    | SSE                                                                                                                                                                | 3300 | 278 MB        |
+| `web-staff`           | statis (`index.html`, `kiosk.html`) di nginx-unprivileged; dipilih karena kecil, tanpa root, dan hanya perlu file statis (routing, TLS, dan header ada di Traefik) | 8080 | 91 MB         |
+| `db-migrate`          | `node-pg-migrate up` sebagai `antre_migrator` (compose service one-shot / Kubernetes Job)                                                                          | -    | 254 MB        |
+
+Ukuran termasuk layer base image (node alpine sekitar 238 MB di Docker Desktop; `node_modules` produksi service sekitar 36 MB).
+
+```bash
+docker build -f infra/docker/Dockerfile --target core-services -t antre/core-services:dev .
+# atau semuanya: docker compose --env-file .env.prod -f docker-compose.prod.yml build
+```
+
+### Stack prod-like lokal (`docker-compose.prod.yml`)
+
+Traefik v3 + semua image di atas + PostgreSQL/Redis/RabbitMQ pada jaringan internal `data` (tanpa akses keluar, tanpa port host). Hanya gateway yang membuka port host: `127.0.0.1:18080` (HTTP) dan `127.0.0.1:18443` (HTTPS dengan sertifikat self-signed bawaan Traefik). Port dev (35432, 36379, 35672, 45672) dan PostgreSQL lokal 5432 tidak dipakai.
+
+```bash
+cp .env.prod.example .env.prod          # ganti SEMUA CHANGE_ME; buat rahasia dengan: openssl rand -hex 32
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --wait
+bash infra/docker/smoke-prod.sh         # smoke test lewat gateway (butuh curl, node, openssl)
+docker compose --env-file .env.prod -f docker-compose.prod.yml down -v   # hapus stack beserta volume (project antre-prod)
+```
+
+Urutan start: PostgreSQL, `db-roles` (satu kali; membuat 4 role dari `infra/docker/db-roles.sql` dengan password rahasia), `db-migrate` (satu kali), lalu service aplikasi, terakhir gateway. Routing ada di `infra/traefik/dynamic/antre.yml`:
+
+- `/api/v1/auth|users|catalog|locations|queues|bookings|billing|tenants|admin|payments` ke core-services; `/api/v1/auth/login` dan `/register` dengan rate limit per IP (30/menit, burst 10).
+- `/api/v1/realtime` ke realtime-gateway (SSE: tanpa kompresi dan buffering, tanpa write timeout).
+- `/api/v1/channels/wa/` (webhook Meta; path sebenarnya di kode, bukan `/webhook/whatsapp`) ke wa-channel dengan flood guard longgar (300 req/dtk): spesifikasi mengecualikan webhook dari rate limit.
+- `/`, `/index.html`, `/kiosk.html`, `/assets/` ke web-staff (dengan CSP). Daftar putih, bukan catch-all.
+- `/internal/*`, `/healthz`, `/readyz`, `/metrics`, dan semua path lain: 404 di gateway (tidak ada router). Dibuktikan oleh `smoke-prod.sh`.
+- Header keamanan: HSTS (hanya di HTTPS), `nosniff`, `frameDeny`, `Referrer-Policy`, `Permissions-Policy`.
+
+Produksi dengan Traefik sendiri: pasang `certificatesResolvers` ACME (Let's Encrypt) pada `traefik.yml`, hapus entry point `web` atau jadikan redirect, dan atur `ipStrategy.depth` pada middleware rate limit bila ada load balancer di depan Traefik.
+
+### Variabel dan rahasia wajib
+
+Diisi di `.env.prod` (compose) atau Secret `antre-secrets` (k8s, templat: `infra/k8s/secret.template.yaml`). `JWT_SECRET`, `WA_CHANNEL_SERVICE_TOKEN`, `PAYMENT_CALLBACK_SECRET`, `WA_APP_SECRET`, dan `WA_VERIFY_TOKEN` wajib diganti dan tidak boleh berawalan `dev-only` (service menolak start saat `NODE_ENV=production`; teruji di image):
+
+- `JWT_SECRET`, `WA_CHANNEL_SERVICE_TOKEN`, `PAYMENT_CALLBACK_SECRET`: min. 32 karakter. `WA_APP_SECRET`, `WA_VERIFY_TOKEN`: min. 16.
+- Password database (`antre_migrator`, `antre_app`, `antre_platform_admin`, admin PostgreSQL), `REDIS_PASSWORD`, `RABBITMQ_PASSWORD`. Gunakan karakter aman URL (hex).
+- `WA_ADAPTER=meta` memerlukan `META_WA_ACCESS_TOKEN` dan `META_WA_PHONE_NUMBER_ID`.
+
+Rotasi: ganti nilai di `.env.prod` atau Secret, lalu restart pod/service pemakainya. `JWT_SECRET` dipakai core-services dan realtime-gateway sekaligus (restart keduanya; semua login dan token kiosk lama tidak berlaku lagi). `WA_CHANNEL_SERVICE_TOKEN` dipakai core-services dan wa-channel. `WA_APP_SECRET` harus sama dengan App Secret di dasbor Meta. Mengganti password role database: `ALTER ROLE ... PASSWORD`, perbarui URL di Secret, lalu restart.
+
+### Migrasi database
+
+Urutan produksi (spesifikasi 9.3): (1) administrator database membuat role sekali lewat `infra/docker/db-roles.sql` (`psql -v ON_ERROR_STOP=1 -f infra/docker/db-roles.sql "$DATABASE_ADMIN_URL"` dengan `ANTRE_*_PASSWORD` di environment), (2) jalankan Job `db-migrate` dan tunggu selesai, (3) baru terapkan manifest dengan tag image baru. Rollback satu langkah memakai image yang sama: `docker run --rm -e DATABASE_MIGRATOR_URL=... antre/db-migrate:TAG down --migrations-dir migrations --database-url-var DATABASE_MIGRATOR_URL`.
+
+### Kubernetes / k3s (`infra/k8s`, kustomize)
+
+```bash
+kubectl kustomize infra/k8s/overlays/prod        # render
+kubectl -n antre create secret generic antre-secrets --from-env-file=secrets.env   # atau apply templat yang sudah diisi
+kubectl -n antre delete job db-migrate --ignore-not-found
+kubectl apply -k infra/k8s/overlays/prod
+kubectl -n antre wait --for=condition=complete job/db-migrate --timeout=300s
+```
+
+(Namespace `antre` dibuat oleh `kubectl apply -k`; buat dulu dengan `kubectl apply -f infra/k8s/base/namespace.yaml` bila Secret dibuat sebelum apply.)
+
+- `base/`: namespace (Pod Security `restricted`), ConfigMap, Deployment + Service + HPA + PodDisruptionBudget per service, IngressRoute + Middleware Traefik (aturan sama dengan compose, tanpa `/internal`), NetworkPolicy (ingress hanya dari Traefik ke service publik; core hanya dari wa-channel; scrape dari namespace `monitoring`).
+- Pod: non-root, rootfs read-only, `capabilities: drop [ALL]`, seccomp `RuntimeDefault`, probe `/readyz` (core: `/healthz`) dan `/healthz`, rolling update tanpa downtime (`maxUnavailable: 0`).
+- Resource (node 2 vCPU / 4 GB): core 200m/256Mi (limit 1 CPU/512Mi), realtime dan wa-channel 100m, worker 50m, web-staff 20m.
+- HPA: CPU rata-rata 70%, min 1 maks 4 (NFR-SCAL-01).
+- `jobs/db-migrate/`: Job migrasi. `overlays/prod`: image GHCR (ganti `OWNER` dan tag `sha-<commit>`); PostgreSQL/Redis/RabbitMQ adalah layanan terkelola yang URL-nya ada di Secret. `overlays/dev`: salinan kecil PostgreSQL/Redis/RabbitMQ dalam cluster, Job `db-roles`, dan Secret placeholder; hanya untuk dev/uji.
+- Validasi tanpa cluster: render kustomize lalu pipe ke kubeconform (`docker run --rm -i ghcr.io/yannh/kubeconform:latest -strict -summary -kubernetes-version 1.32.0 -schema-location default -schema-location <katalog CRD datreeio> -`; perintah lengkap di `ci.yml`, job `manifests`). `kubectl apply --dry-run=client` memerlukan API server dan belum dijalankan.
+
+### Backup dan restore PostgreSQL
+
+```bash
+# backup (format custom; mencakup tabel, fungsi, dan RLS policy)
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T postgres pg_dump -U postgres -d antre -Fc > antre-$(date +%F).dump
+# restore ke database kosong (role harus sudah ada: jalankan db-roles dulu)
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T postgres pg_restore -U postgres -d antre --clean --if-exists --no-owner < antre-YYYY-MM-DD.dump
+```
+
+Untuk PostgreSQL terkelola pakai snapshot/PITR penyedia. Redis dan RabbitMQ tidak perlu di-backup demi kebenaran data (sesi WA dan buffer notifikasi bersifat sementara, spesifikasi 9.5). Jalankan uji restore berkala.
+
+### Runbook scaling node (NFR-SCAL-02, manual)
+
+Pemicu: pod HPA `Pending` lebih dari 5 menit karena CPU/memori kurang. (1) Buat VM 2 vCPU / 4 GB; (2) pasang agent k3s dengan `K3S_URL=https://<server>:6443` dan `K3S_TOKEN` dari secrets (pin versi dengan `INSTALL_K3S_VERSION`); (3) `kubectl get nodes` harus menunjukkan node baru `Ready`; (4) setelah beban puncak, `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`, `kubectl delete node <node>`, lalu hapus VM. Scale pod manual darurat: `kubectl -n antre scale deploy/core-services --replicas=3` (HPA akan menyesuaikan lagi).
+
+### Keterbatasan
+
+- HPA hanya memakai CPU. Kriteria req/dtk per pod (> 50) memerlukan Prometheus + Prometheus Adapter, dan kriteria panjang antrean `notifications.wa` (> 100 per pod) memerlukan KEDA atau adapter metrik eksternal; keduanya belum dipasang.
+- Forward-auth JWT dan rate limit per tenant di gateway belum ada: JWT diverifikasi oleh service sendiri, rate limit gateway hanya per IP dan per replika Traefik.
+- Limiter login di core melihat IP Traefik (core belum memakai `trustProxy`), jadi kuncinya efektif per email.
+- NetworkPolicy hanya ingress; egress ke layanan terkelola tidak dibatasi karena CIDR-nya bergantung penyedia.
+- Belum diuji pada k3s sungguhan; CSP web belum diuji di browser sungguhan.
+- `infra/k8s/overlays/dev/db-roles.sql` adalah salinan `infra/docker/db-roles.sql` (CI memeriksa keduanya sama).
+
 ## CI
 
-`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan dua job:
+`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan empat job:
 
 - `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, test, dan build core-services, notification-worker, wa-channel, realtime-gateway, serta web-staff.
 - `db-integration`: PostgreSQL 16 (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), Redis 8 (port host 36379, sesuai `REDIS_URL` di `.env.example`), dan RabbitMQ 4.3 dengan management (port host 35672 dan 45672, sesuai `RABBITMQ_URL` dan `RABBITMQ_MANAGEMENT_URL`) sebagai service container, lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, `pnpm core:test:integration` (tes API Tenant & Auth, Catalog, Queue, Booking, callback pembayaran, langganan dan konsol Super Admin, publish saat broker mati, endpoint internal WhatsApp), `pnpm notif:test:integration`, `pnpm wa:test:integration`, lalu `pnpm rt:test:integration`.
+- `images`: build semua image (target Dockerfile) dengan cache GitHub Actions, tanpa push.
+- `manifests`: render kustomize base/dev/prod, validasi dengan kubeconform (termasuk CRD Traefik), `docker compose config` untuk berkas dev dan prod, dan cek salinan `db-roles.sql`.
+
+`.github/workflows/release.yml` (tag `v*` atau manual) mendorong image ke GHCR dengan tag `sha-<commit>` dan tag versi; nonaktif sampai variabel repositori `RELEASE_ENABLED=true` diset, dan tanpa secret tambahan (memakai `GITHUB_TOKEN`).
 
 ## Konvensi
 

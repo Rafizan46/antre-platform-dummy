@@ -1,0 +1,67 @@
+name: Release images
+
+# Pushes the six images to GHCR with tags sha-<commit> and the version tag (spec 9.3 step 2).
+# Inactive until the repository variable RELEASE_ENABLED is set to "true" (Settings, Variables).
+# It needs no extra secret: GITHUB_TOKEN with `packages: write` is enough for ghcr.io/<owner>.
+# Deploy stays manual (README, Deploy): update the tags in infra/k8s/overlays/prod and apply.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    name: Push ${{ matrix.target }}
+    if: ${{ vars.RELEASE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - core-services
+          - notification-worker
+          - wa-channel
+          - realtime-gateway
+          - web-staff
+          - db-migrate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/antre-${{ matrix.target }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=ref,event=tag
+
+      - name: Build and push ${{ matrix.target }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,scope=${{ matrix.target }},mode=max

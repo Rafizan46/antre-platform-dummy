@@ -1,0 +1,21 @@
+# Keep the Docker build context to what the image build reads (infra/docker/Dockerfile).
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/*.log
+
+.git
+.github
+.vscode
+.crew
+docs
+.env
+.env.*
+!.env.example
+
+# Compose, manifests, and docs are not needed to build images.
+docker-compose*.yml
+infra/k8s
+infra/traefik
+README.md

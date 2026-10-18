@@ -1,7 +1,8 @@
 # apps/gateway
 
-API Gateway Antre adalah Traefik (spesifikasi §5.1, §9.1, §9.2), bukan aplikasi Node. Karena itu folder ini bukan paket pnpm: tidak ada `package.json`, dan `pnpm-workspace.yaml` mengecualikannya (`!apps/gateway`).
+API Gateway Antre adalah Traefik (spesifikasi 5.1, 9.1, 9.2), bukan aplikasi Node. Folder ini bukan paket pnpm (`pnpm-workspace.yaml` mengecualikannya) dan hanya berisi catatan; konfigurasi Traefik ada di:
 
-Folder ini nantinya berisi konfigurasi gateway: routing `/api/v1/*` ke service, verifikasi JWT forward-auth, rate limiting (kecuali webhook WhatsApp), dan pemblokiran `/internal/*`. Format konfigurasinya (konfigurasi dinamis Traefik dan/atau resource Traefik di k3s) diputuskan di workstream gateway. Pemilik: Julius Arthur (§10).
+- `infra/traefik/traefik.yml` dan `infra/traefik/dynamic/antre.yml`: gateway stack prod-like lokal (`docker-compose.prod.yml`).
+- `infra/k8s/base/ingress.yaml`: IngressRoute dan Middleware Traefik untuk k3s (aturan routing yang sama).
 
-Belum ada konfigurasi pada S01.
+Routing, rate limit per IP, header keamanan, dan penutupan `/internal/*` dijelaskan di bagian Deploy pada `README.md` root. Forward-auth JWT dan rate limit per tenant di gateway belum diimplementasikan (JWT diverifikasi oleh service). Pemilik: Julius Arthur (spesifikasi 10).

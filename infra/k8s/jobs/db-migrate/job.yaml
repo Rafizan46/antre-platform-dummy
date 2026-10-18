@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  labels:
+    app.kubernetes.io/name: db-migrate
+spec:
+  # Job pod templates are immutable: delete the Job before applying a new image tag.
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db-migrate
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: db-migrate
+          image: antre/db-migrate:dev
+          env:
+            - name: DATABASE_MIGRATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: DATABASE_MIGRATOR_URL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]

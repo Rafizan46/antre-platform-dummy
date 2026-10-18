@@ -1,0 +1,51 @@
+# Creates the four database roles with the dev passwords (spec 6.1). In production the database
+# administrator runs infra/docker/db-roles.sql once instead (see README, Deploy).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-roles
+spec:
+  backoffLimit: 20
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: db-roles
+          image: postgres:16.15-alpine
+          command: [psql, -v, ON_ERROR_STOP=1, -f, /sql/db-roles.sql]
+          env:
+            - name: PGHOST
+              value: postgres
+            - name: PGUSER
+              value: postgres
+            - name: PGDATABASE
+              value: antre
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: antre-dev-infra
+                  key: POSTGRES_PASSWORD
+            - name: ANTRE_MIGRATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: antre-dev-infra
+                  key: ANTRE_MIGRATOR_PASSWORD
+            - name: ANTRE_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: antre-dev-infra
+                  key: ANTRE_APP_PASSWORD
+            - name: ANTRE_PLATFORM_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: antre-dev-infra
+                  key: ANTRE_PLATFORM_ADMIN_PASSWORD
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+      volumes:
+        - name: sql
+          configMap:
+            name: db-roles-sql

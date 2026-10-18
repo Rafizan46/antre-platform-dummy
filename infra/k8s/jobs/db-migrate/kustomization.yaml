@@ -1,0 +1,12 @@
+# Database migration Job (spec 9.3 step 3). Apply it and wait for completion BEFORE rolling out
+# new application images:
+#   kubectl -n antre delete job db-migrate --ignore-not-found
+#   kubectl apply -k infra/k8s/jobs/db-migrate   (or the overlay that includes it)
+#   kubectl -n antre wait --for=condition=complete job/db-migrate --timeout=300s
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: antre
+
+resources:
+  - job.yaml

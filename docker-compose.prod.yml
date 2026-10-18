@@ -1,0 +1,233 @@
+# Prod-like stack on one machine (spec sections 9.1 and 9.4): Traefik gateway, the five built
+# images, and PostgreSQL/Redis/RabbitMQ. Not for real production (that is k3s, infra/k8s), but it
+# runs the very same images with NODE_ENV=production, so dev-only secrets are refused.
+#
+#   cp .env.prod.example .env.prod        # then replace every CHANGE_ME
+#   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --wait
+#
+# Networks: `data` is internal (no outbound, no host access) and holds PostgreSQL, Redis, and
+# RabbitMQ; `edge` is the only network Traefik is on. Only the gateway publishes host ports.
+name: antre-prod
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+
+x-app-env: &app-env
+  NODE_ENV: production
+  LOG_LEVEL: info
+  REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:?set RABBITMQ_USER}:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}@rabbitmq:5672
+  DATABASE_APP_URL: postgres://antre_app:${ANTRE_APP_PASSWORD:?set ANTRE_APP_PASSWORD}@postgres:5432/antre
+
+services:
+  gateway:
+    <<: *service-defaults
+    image: traefik:v3.7.15@sha256:0f6150202bc1fed72a7bd2107460eaa510e5b8a905f3fdb5b84f2c8619c33368
+    command: ['--configFile=/etc/traefik/traefik.yml']
+    ports:
+      - '127.0.0.1:${GATEWAY_HTTP_PORT:-18080}:8000'
+      - '127.0.0.1:${GATEWAY_HTTPS_PORT:-18443}:8443'
+    volumes:
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infra/traefik/dynamic:/etc/traefik/dynamic:ro
+    networks: [edge]
+    depends_on:
+      core-services: { condition: service_healthy }
+      realtime-gateway: { condition: service_healthy }
+      wa-channel: { condition: service_healthy }
+      web-staff: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD', 'traefik', 'healthcheck', '--ping', '--ping.entrypoint=traefik']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  postgres:
+    image: postgres:16.15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: antre
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d antre']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:8.10.2-alpine
+    restart: unless-stopped
+    # Single instance, <= 100 MB (spec 9.2). noeviction: slot locks and WhatsApp sessions must
+    # never be silently dropped; writes fail loudly when memory is full instead.
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --maxmemory
+      - 100mb
+      - --maxmemory-policy
+      - noeviction
+      - --requirepass
+      - ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    networks: [data]
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4.3.6-alpine
+    restart: unless-stopped
+    hostname: antre-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?set RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks: [data]
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # One-shot: creates the four database roles (spec 6.1) with the secret passwords. Idempotent.
+  db-roles:
+    image: postgres:16.15-alpine
+    restart: 'no'
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: antre
+      ANTRE_MIGRATOR_PASSWORD: ${ANTRE_MIGRATOR_PASSWORD:?set ANTRE_MIGRATOR_PASSWORD}
+      ANTRE_APP_PASSWORD: ${ANTRE_APP_PASSWORD}
+      ANTRE_PLATFORM_ADMIN_PASSWORD: ${ANTRE_PLATFORM_ADMIN_PASSWORD:?set ANTRE_PLATFORM_ADMIN_PASSWORD}
+    command: ['psql', '-v', 'ON_ERROR_STOP=1', '-f', '/db-roles.sql']
+    volumes:
+      - ./infra/docker/db-roles.sql:/db-roles.sql:ro
+    networks: [data]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # One-shot: applies packages/db/migrations as antre_migrator (a Kubernetes Job in k3s).
+  db-migrate:
+    image: antre/db-migrate:${ANTRE_TAG:-dev}
+    build: &build-defaults
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: db-migrate
+    restart: 'no'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DATABASE_MIGRATOR_URL: postgres://antre_migrator:${ANTRE_MIGRATOR_PASSWORD}@postgres:5432/antre
+    networks: [data]
+    depends_on:
+      db-roles: { condition: service_completed_successfully }
+
+  core-services:
+    <<: *service-defaults
+    image: antre/core-services:${ANTRE_TAG:-dev}
+    build:
+      <<: *build-defaults
+      target: core-services
+    environment:
+      <<: *app-env
+      DATABASE_PLATFORM_ADMIN_URL: postgres://antre_platform_admin:${ANTRE_PLATFORM_ADMIN_PASSWORD}@postgres:5432/antre
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      WA_CHANNEL_SERVICE_TOKEN: ${WA_CHANNEL_SERVICE_TOKEN:?set WA_CHANNEL_SERVICE_TOKEN}
+      PAYMENT_CALLBACK_SECRET: ${PAYMENT_CALLBACK_SECRET:?set PAYMENT_CALLBACK_SECRET}
+    networks: [edge, data]
+    depends_on:
+      db-migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  notification-worker:
+    <<: *service-defaults
+    image: antre/notification-worker:${ANTRE_TAG:-dev}
+    build:
+      <<: *build-defaults
+      target: notification-worker
+    environment:
+      <<: *app-env
+      WA_ADAPTER: ${WA_ADAPTER:-sandbox}
+      META_WA_ACCESS_TOKEN: ${META_WA_ACCESS_TOKEN:-}
+      META_WA_PHONE_NUMBER_ID: ${META_WA_PHONE_NUMBER_ID:-}
+      QRIS_SIMULATOR_URL: ${QRIS_SIMULATOR_URL:-}
+    # edge gives outbound internet for the Meta Cloud API (WA_ADAPTER=meta); nothing is published.
+    networks: [edge, data]
+    depends_on:
+      db-migrate: { condition: service_completed_successfully }
+      rabbitmq: { condition: service_healthy }
+
+  wa-channel:
+    <<: *service-defaults
+    image: antre/wa-channel:${ANTRE_TAG:-dev}
+    build:
+      <<: *build-defaults
+      target: wa-channel
+    environment:
+      <<: *app-env
+      CORE_SERVICES_URL: http://core-services:3000
+      WA_CHANNEL_SERVICE_TOKEN: ${WA_CHANNEL_SERVICE_TOKEN}
+      WA_APP_SECRET: ${WA_APP_SECRET:?set WA_APP_SECRET}
+      WA_VERIFY_TOKEN: ${WA_VERIFY_TOKEN:?set WA_VERIFY_TOKEN}
+      META_WA_PHONE_NUMBER_ID: ${META_WA_PHONE_NUMBER_ID:-}
+    networks: [edge, data]
+    depends_on:
+      core-services: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  realtime-gateway:
+    <<: *service-defaults
+    image: antre/realtime-gateway:${ANTRE_TAG:-dev}
+    build:
+      <<: *build-defaults
+      target: realtime-gateway
+    environment:
+      <<: *app-env
+      JWT_SECRET: ${JWT_SECRET}
+    networks: [edge, data]
+    depends_on:
+      redis: { condition: service_healthy }
+
+  web-staff:
+    <<: *service-defaults
+    image: antre/web-staff:${ANTRE_TAG:-dev}
+    build:
+      <<: *build-defaults
+      target: web-staff
+    networks: [edge]
+
+networks:
+  edge:
+  data:
+    internal: true
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:

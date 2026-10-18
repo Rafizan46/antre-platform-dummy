@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-gateway
+  labels:
+    app.kubernetes.io/name: realtime-gateway
+spec:
+  # replicas is owned by the HorizontalPodAutoscaler below.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: realtime-gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: realtime-gateway
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: realtime-gateway
+      containers:
+        - name: realtime-gateway
+          image: antre/realtime-gateway:dev
+          ports:
+            - name: http
+              containerPort: 3300
+          envFrom:
+            - configMapRef:
+                name: antre-config
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: JWT_SECRET
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: antre-secrets
+                  key: REDIS_URL
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: realtime-gateway
+  labels:
+    app.kubernetes.io/name: realtime-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: realtime-gateway
+  ports:
+    - name: http
+      port: 3300
+      targetPort: http
+---
+# NFR-SCAL-01: scale out at 70% average CPU per pod, 1 to 4 replicas. The req/s criterion
+# (> 50 req/s per pod, Prometheus Adapter) and the notifications.wa queue-length criterion
+# (> 100 messages per pod, KEDA or an external-metrics adapter) need components this repo does
+# not install; they are an MVP limitation (README, Deploy).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: realtime-gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: realtime-gateway
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: realtime-gateway
+spec:
+  # With one replica this still lets a node drain (runbook, README); with two or more replicas at
+  # most one is taken down voluntarily at a time.
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: realtime-gateway
