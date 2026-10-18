@@ -26,7 +26,8 @@ import {
 } from './service.js';
 import { slotLockKey, type SlotLock } from './slot-lock.js';
 
-const ADVISORY_LOCK_CLASS = 72070;
+/** Advisory lock class of the background jobs (booking 1-2, billing 3). */
+export const ADVISORY_LOCK_CLASS = 72070;
 const EXPIRY_JOB_ID = 1;
 const REMINDER_JOB_ID = 2;
 const DEFAULT_INTERVAL_MS = 60_000;
@@ -45,9 +46,9 @@ export interface JobResult {
   processed: number;
 }
 
-/** Runs `work` only when this session gets the advisory lock of the job. */
-async function runAsLeader(
-  deps: BookingJobDeps,
+/** Runs `work` only when this session gets the advisory lock of the job (shared with billing). */
+export async function runAsLeader(
+  deps: { pool: pg.Pool },
   jobId: number,
   work: () => Promise<number>,
 ): Promise<JobResult> {

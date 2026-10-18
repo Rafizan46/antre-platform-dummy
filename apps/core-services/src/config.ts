@@ -9,6 +9,8 @@ export interface CoreConfig {
   redisUrl: string;
   /** HMAC secret that signs the QRIS payment callback (spec section 7.4). */
   paymentCallbackSecret: string;
+  /** antre_platform_admin connection of the Super Admin console; null = console disabled. */
+  platformAdminDatabaseUrl: string | null;
   /** RabbitMQ for the antre.events publisher (amqp:// or amqps://). */
   rabbitmqUrl: string;
   host: string;
@@ -81,6 +83,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): CoreConfig {
     redisUrl,
     paymentCallbackSecret,
     rabbitmqUrl,
+    platformAdminDatabaseUrl: env.DATABASE_PLATFORM_ADMIN_URL || null,
     host: env.CORE_SERVICES_HOST || DEFAULT_HOST,
     port: readPort(env.CORE_SERVICES_PORT),
   };

@@ -27,6 +27,8 @@ export interface LocationContext {
   period_month: string;
   /** Whether `now` lies within today's opening hours and outside the break. */
   open_now: boolean;
+  /** The Super Admin suspended the tenant or the location (S11): no new tickets or holds. */
+  suspended: boolean;
 }
 
 /** Null when the location is not visible to the tenant (404). */
@@ -44,7 +46,8 @@ export async function getLocationContext(
               AND c.local_ts::time >= oh.open_time AND c.local_ts::time < oh.close_time
               AND NOT (oh.break_start IS NOT NULL
                        AND c.local_ts::time >= oh.break_start AND c.local_ts::time < oh.break_end)
-            ) AS open_now
+            ) AS open_now,
+            (l.suspended_at IS NOT NULL OR t.suspended_at IS NOT NULL) AS suspended
      FROM locations l
      JOIN tenants t ON t.id = l.tenant_id
      CROSS JOIN LATERAL (SELECT ($2::timestamptz AT TIME ZONE l.timezone) AS local_ts) c

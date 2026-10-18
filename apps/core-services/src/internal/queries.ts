@@ -54,7 +54,8 @@ export async function getWaContext(
 ): Promise<WaContextDto | null> {
   const result = await client.query<WaContextRow>(
     `SELECT t.id AS tenant_id, t.name AS tenant_name, l.id, l.code, l.name, l.timezone,
-            l.is_active, t.service_mode, t.show_wait_estimate,
+            (l.is_active AND l.suspended_at IS NULL AND t.suspended_at IS NULL) AS is_active,
+            t.service_mode, t.show_wait_estimate,
             NULLIF(btrim(t.branding->>'wa_greeting'), '') AS wa_greeting,
             NULLIF(btrim(t.branding#>>'{labels,resource}'), '') AS resource_label
      FROM locations l

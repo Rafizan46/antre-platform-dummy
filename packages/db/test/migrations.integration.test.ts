@@ -16,6 +16,7 @@ const MIGRATIONS = [
   '1792195260000_definer-functions',
   '1792281600000_catalog-queue-constraints',
   '1792285200000_notification-log-event-key',
+  '1792371600000_platform-admin-suspension',
 ];
 
 async function countObjects(adminUrl: string): Promise<{ tables: number; functions: number }> {

@@ -32,6 +32,8 @@ export interface TestApp {
   events: InMemoryEventPublisher;
   /** KIOSK_DISPLAY revocations recorded by DELETE /locations/:id/kiosk-tokens. */
   kioskRevocations: InMemoryKioskRevocations;
+  /** Pool of the antre_platform_admin role (Super Admin console), the same one the app uses. */
+  platformAdminPool: pg.Pool;
   close: () => Promise<void>;
 }
 
@@ -40,6 +42,7 @@ export async function createTestApp(
 ): Promise<TestApp> {
   const urls = inject('databaseUrls');
   const pool = new pg.Pool({ connectionString: urls.app, max: 10 });
+  const platformAdminPool = new pg.Pool({ connectionString: urls.platformAdmin, max: 2 });
   const { jwtSecret, waChannelToken, paymentCallbackSecret } = loadConfig({
     ...process.env,
     DATABASE_APP_URL: urls.app,
@@ -56,6 +59,7 @@ export async function createTestApp(
     // A real publisher (e.g. RabbitMQ) replaces the in-memory one; `events` then stays empty.
     events: options.publisher ?? events,
     kioskRevocations,
+    platformAdminPool,
     now: options.now,
   });
   await app.ready();
@@ -68,9 +72,11 @@ export async function createTestApp(
     slotLock,
     events,
     kioskRevocations,
+    platformAdminPool,
     close: async () => {
       await app.close();
       await pool.end();
+      await platformAdminPool.end();
     },
   };
 }

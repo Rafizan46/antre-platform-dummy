@@ -102,6 +102,17 @@ async function openContext(
 
 type Audience = 'staff' | 'internal';
 
+/** S11: a suspended tenant or location takes no new tickets or holds (409 LOCATION_CLOSED). */
+export function assertNotSuspended(context: LocationContext): void {
+  if (context.suspended) {
+    throw new AppError(
+      'LOCATION_CLOSED',
+      'Lokasi ini sedang ditangguhkan oleh administrator platform.',
+      { details: { reason: 'SUSPENDED' } },
+    );
+  }
+}
+
 function estimatedServeTime(row: TicketRow, now: Date): string {
   return new Date(
     now.getTime() + row.people_ahead * row.avg_duration_min * MS_PER_MINUTE,
@@ -246,6 +257,7 @@ export async function createTicket(
 ): Promise<Outcome<QueueTicketDto>> {
   const now = env.now.toISOString();
   const context = await openContext(client, input.locationId, now);
+  assertNotSuspended(context);
   const audience: Audience = input.channel === 'WHATSAPP' ? 'internal' : 'staff';
 
   if (context.service_mode === 'RESERVATION') {

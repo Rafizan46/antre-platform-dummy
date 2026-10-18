@@ -24,6 +24,7 @@ import { incrementUsageUnconditional, quotaThresholdEvents } from '../billing/qu
 import { AppError, uniqueViolationConstraint } from '../errors.js';
 import { publishAll } from '../events/publisher.js';
 import { getLocationContext, type LocationContext } from '../queue/queries.js';
+import { assertNotSuspended } from '../queue/service.js';
 import {
   expireStaleHolds,
   getBookableService,
@@ -427,6 +428,7 @@ export async function createHold(
 ): Promise<BookingOutcome<BookingDto>> {
   const now = env.now.toISOString();
   const context = await openContext(client, env, input.locationId);
+  assertNotSuspended(context);
   if (!context.is_active) throw new AppError('LOCATION_CLOSED', 'Lokasi sedang tutup.');
   const service = await getBookableService(client, input.serviceId);
   if (service === null) throw new AppError('NOT_FOUND', 'Layanan tidak ditemukan.');

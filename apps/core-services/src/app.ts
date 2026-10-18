@@ -1,12 +1,14 @@
-// Core REST services (spec section 5.1): Tenant & Auth, Catalog, Queue, Booking, and the payment
-// callback.
+// Core REST services (spec section 5.1): Tenant & Auth, Catalog, Queue, Booking, the payment
+// callbacks, Billing (S11), and the Super Admin console (S11).
 import Fastify from 'fastify';
 import type pg from 'pg';
 
 import { LoginRateLimiter } from './auth/login-rate-limiter.js';
 import { createDummyVerifier } from './auth/password.js';
 import { authenticate, type AppDeps } from './auth/plugin.js';
+import { adminRoutes } from './admin/routes.js';
 import { authRoutes } from './auth/routes.js';
+import { billingCallbackRoutes, billingRoutes } from './billing/routes.js';
 import { signKioskToken } from './auth/kiosk-tokens.js';
 import { createTokenService } from './auth/tokens.js';
 import { bookingRoutes } from './booking/routes.js';
@@ -36,6 +38,8 @@ export interface AppOptions {
   slotLock: SlotLock;
   /** HMAC secret of the QRIS payment callback. */
   paymentCallbackSecret: string;
+  /** Pool of the antre_platform_admin role (Super Admin console); the caller owns it. */
+  platformAdminPool?: pg.Pool;
   /** Defaults to a no-op publisher; server.ts passes the RabbitMQ publisher. */
   events?: EventPublisher;
   /** Defaults to an in-memory store; server.ts passes RedisRealtime (S10). */
@@ -70,6 +74,7 @@ export function buildApp(options: AppOptions) {
     signKioskToken: (tenantId, locationId) =>
       signKioskToken({ secret: options.jwtSecret, tenantId, locationId, now: now() }),
     kioskRevocations: options.kioskRevocations ?? new InMemoryKioskRevocations(),
+    platformAdminPool: options.platformAdminPool ?? null,
   };
 
   registerErrorHandling(app);
@@ -83,6 +88,7 @@ export function buildApp(options: AppOptions) {
 
   // Payment provider callback: no JWT; authenticated by an HMAC over the raw body.
   app.register(paymentRoutes, { prefix: '/api/v1/payments', deps });
+  app.register(billingCallbackRoutes, { prefix: '/api/v1/billing/payments', deps });
 
   // Everything else under /api/v1 requires a valid token (hook runs before routing handlers).
   app.register(
@@ -94,6 +100,8 @@ export function buildApp(options: AppOptions) {
       await scope.register(catalogRoutes, { prefix: '/catalog', deps });
       await scope.register(queueRoutes, { prefix: '/queues', deps });
       await scope.register(bookingRoutes, { prefix: '/bookings', deps });
+      await scope.register(billingRoutes, { prefix: '/billing', deps });
+      await scope.register(adminRoutes, { prefix: '/admin', deps });
     },
     { prefix: '/api/v1' },
   );

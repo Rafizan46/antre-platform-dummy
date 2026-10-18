@@ -31,6 +31,11 @@ export interface AppDeps {
   signKioskToken: (tenantId: string, locationId: string) => Promise<KioskToken>;
   /** Revocation store of the KIOSK_DISPLAY tokens (Redis, read by the Realtime SSE Gateway). */
   kioskRevocations: KioskRevocations;
+  /**
+   * Pool of the antre_platform_admin role for /api/v1/admin (FR-ADMIN-01); null when
+   * DATABASE_PLATFORM_ADMIN_URL is not configured (the admin routes then answer 500).
+   */
+  platformAdminPool: pg.Pool | null;
 }
 
 declare module 'fastify' {
@@ -87,11 +92,32 @@ export async function withTenant<T>(
     throw new AppError('FORBIDDEN', 'Akun ini tidak terikat pada tenant.');
   }
   return withTransaction(deps.pool, auth.tenantId, async (client) => {
-    const result = await client.query<{ role: string }>(
-      'SELECT role FROM users WHERE id = $1 AND is_active',
+    const result = await client.query<{ role: string; suspended: boolean }>(
+      `SELECT u.role, t.suspended_at IS NOT NULL AS suspended
+       FROM users u JOIN tenants t ON t.id = u.tenant_id
+       WHERE u.id = $1 AND u.is_active`,
       [auth.userId],
     );
-    if (result.rows[0]?.role !== auth.role) throw unauthorized();
+    const user = result.rows[0];
+    if (user?.role !== auth.role) throw unauthorized();
+    // S11: a tenant suspended by the Super Admin loses access to every staff and owner route.
+    if (user.suspended) {
+      throw new AppError(
+        'FORBIDDEN',
+        'Akun usaha ini sedang ditangguhkan oleh administrator platform.',
+        {
+          details: { reason: 'TENANT_SUSPENDED' },
+        },
+      );
+    }
     return work(client);
   });
+}
+
+/** preHandler of /api/v1/admin: SUPER_ADMIN only (FR-AUTH-02); tenant roles get 403. */
+export async function requireSuperAdmin(request: FastifyRequest): Promise<void> {
+  const auth = requireAuth(request);
+  if (auth.role !== 'SUPER_ADMIN' || auth.tenantId !== null) {
+    throw new AppError('FORBIDDEN', 'Anda tidak memiliki akses ke sumber daya ini.');
+  }
 }

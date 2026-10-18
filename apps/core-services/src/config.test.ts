@@ -25,9 +25,17 @@ describe('loadConfig', () => {
       redisUrl: REDIS_URL,
       paymentCallbackSecret: PAYMENT_SECRET,
       rabbitmqUrl: RABBITMQ_URL,
+      platformAdminDatabaseUrl: null,
       host: '127.0.0.1',
       port: 3000,
     });
+  });
+
+  it('reads the optional antre_platform_admin URL of the Super Admin console', () => {
+    expect(
+      loadConfig({ ...BASE, DATABASE_PLATFORM_ADMIN_URL: 'postgres://admin' })
+        .platformAdminDatabaseUrl,
+    ).toBe('postgres://admin');
   });
 
   it('reads host and port', () => {
