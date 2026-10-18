@@ -24,6 +24,20 @@ export class InMemoryEventPublisher implements EventPublisher {
   }
 }
 
+/**
+ * Publishes every event to all publishers (RabbitMQ and the realtime Redis path, S10). Each one is
+ * tried even when another fails; the first failure is rethrown afterwards for publishAll to log.
+ */
+export class FanoutEventPublisher implements EventPublisher {
+  constructor(private readonly publishers: EventPublisher[]) {}
+
+  async publish(event: EventEnvelope): Promise<void> {
+    const results = await Promise.allSettled(this.publishers.map((p) => p.publish(event)));
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed !== undefined) throw failed.reason;
+  }
+}
+
 interface ErrorLogger {
   error(object: object, message: string): void;
 }

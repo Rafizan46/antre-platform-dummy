@@ -193,10 +193,34 @@ importers:
 
   apps/realtime-gateway:
     dependencies:
+      '@antre/messaging':
+        specifier: workspace:*
+        version: link:../../packages/messaging
+      '@antre/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+      '@redis/client':
+        specifier: 'catalog:'
+        version: 6.3.0
       fastify:
         specifier: 'catalog:'
         version: 5.12.7
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.12
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
+      '@antre/core-services':
+        specifier: workspace:*
+        version: link:../core-services
+      '@antre/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@antre/event-contracts':
+        specifier: workspace:*
+        version: link:../../packages/event-contracts
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5
@@ -268,6 +292,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.1(react@19.3.1)
     devDependencies:
+      '@antre/messaging':
+        specifier: workspace:*
+        version: link:../../packages/messaging
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5

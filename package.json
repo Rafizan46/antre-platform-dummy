@@ -16,6 +16,7 @@
     "db:test:integration": "pnpm --filter @antre/db test:integration",
     "notif:test:integration": "pnpm --filter @antre/notification-worker test:integration",
     "wa:test:integration": "pnpm --filter @antre/wa-channel test:integration",
+    "rt:test:integration": "pnpm --filter @antre/realtime-gateway test:integration",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

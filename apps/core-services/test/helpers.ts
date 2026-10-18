@@ -13,6 +13,7 @@ import { loadConfig } from '../src/config.js';
 import { InMemorySlotLock, RedisSlotLock, type SlotLock } from '../src/booking/slot-lock.js';
 import { withTransaction } from '../src/db/transaction.js';
 import { InMemoryEventPublisher, type EventPublisher } from '../src/events/publisher.js';
+import { InMemoryKioskRevocations } from '../src/realtime/redis-realtime.js';
 
 export const DEFAULT_PASSWORD = 'password-ok-123';
 
@@ -29,6 +30,8 @@ export interface TestApp {
   slotLock: SlotLock;
   /** Events published after commits. */
   events: InMemoryEventPublisher;
+  /** KIOSK_DISPLAY revocations recorded by DELETE /locations/:id/kiosk-tokens. */
+  kioskRevocations: InMemoryKioskRevocations;
   close: () => Promise<void>;
 }
 
@@ -43,6 +46,7 @@ export async function createTestApp(
   });
   const events = new InMemoryEventPublisher();
   const slotLock = options.slotLock ?? new InMemorySlotLock();
+  const kioskRevocations = new InMemoryKioskRevocations();
   const app = buildApp({
     pool,
     jwtSecret,
@@ -51,6 +55,7 @@ export async function createTestApp(
     paymentCallbackSecret,
     // A real publisher (e.g. RabbitMQ) replaces the in-memory one; `events` then stays empty.
     events: options.publisher ?? events,
+    kioskRevocations,
     now: options.now,
   });
   await app.ready();
@@ -62,6 +67,7 @@ export async function createTestApp(
     paymentCallbackSecret,
     slotLock,
     events,
+    kioskRevocations,
     close: async () => {
       await app.close();
       await pool.end();
@@ -181,7 +187,7 @@ export const DEFAULT_CLOCK_ISO = '2026-10-19T03:00:00Z';
 
 export async function apiRequest(
   app: FastifyInstance,
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   url: string,
   headers: Record<string, string>,
   payload?: object,

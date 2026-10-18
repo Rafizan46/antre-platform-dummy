@@ -7,6 +7,8 @@ import { buildApp } from './app.js';
 import { startBookingJobs } from './booking/jobs.js';
 import { RedisSlotLock } from './booking/slot-lock.js';
 import { loadConfig } from './config.js';
+import { FanoutEventPublisher } from './events/publisher.js';
+import { RedisRealtime } from './realtime/redis-realtime.js';
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
@@ -25,13 +27,20 @@ async function main(): Promise<void> {
     url: config.redisUrl,
     log: { warn: (object, message) => app.log.warn(object, message) },
   });
+  // S10: every event also goes to Redis (update log + Pub/Sub) for the Realtime SSE Gateway.
+  const realtime = new RedisRealtime({
+    url: config.redisUrl,
+    log: { warn: (object, message) => app.log.warn(object, message) },
+  });
+  const publisher = new FanoutEventPublisher([events, realtime]);
   const app = buildApp({
     pool,
     jwtSecret: config.jwtSecret,
     waChannelToken: config.waChannelToken,
     slotLock,
     paymentCallbackSecret: config.paymentCallbackSecret,
-    events,
+    events: publisher,
+    kioskRevocations: realtime,
     logger: true,
   });
 
@@ -41,11 +50,21 @@ async function main(): Promise<void> {
     app.log.warn({ err: error }, 'redis unavailable at start; holds use the database check');
   });
 
+  realtime.connect().catch((error: unknown) => {
+    app.log.warn({ err: error }, 'redis unavailable at start; realtime updates are skipped');
+  });
+
   // RabbitMQ down at start is not fatal either: events are buffered in memory and flushed after
   // the (re)connect; a publish never fails a request (FR-NOTIF-01, NFR-RELI-01).
   events.start();
 
-  const jobs = startBookingJobs({ pool, slotLock, events, now: () => new Date(), log: app.log });
+  const jobs = startBookingJobs({
+    pool,
+    slotLock,
+    events: publisher,
+    now: () => new Date(),
+    log: app.log,
+  });
 
   let stopping = false;
   const shutdown = (signal: string): void => {
@@ -57,6 +76,7 @@ async function main(): Promise<void> {
       .then(() => app.close())
       .then(() => events.close())
       .then(() => slotLock.close())
+      .then(() => realtime.close())
       .then(() => pool.end())
       .catch((error: unknown) => {
         app.log.error({ err: error }, 'shutdown failed');
@@ -73,6 +93,7 @@ async function main(): Promise<void> {
     await jobs.stop();
     await events.close();
     await slotLock.close();
+    await realtime.close();
     await pool.end();
     process.exitCode = 1;
   }

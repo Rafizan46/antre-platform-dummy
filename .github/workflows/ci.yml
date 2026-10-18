@@ -52,6 +52,12 @@ jobs:
       - name: Build wa-channel
         run: pnpm --filter @antre/wa-channel build
 
+      - name: Build realtime-gateway
+        run: pnpm --filter @antre/realtime-gateway build
+
+      - name: Build web-staff (dashboard and Kiosk TV)
+        run: pnpm --filter @antre/web-staff build
+
   db-integration:
     name: Database, API, and messaging integration tests
     runs-on: ubuntu-latest
@@ -76,7 +82,8 @@ jobs:
           --health-retries 10
       redis:
         # Same image as docker-compose.dev.yml; host port 36379 matches REDIS_URL in .env.example
-        # (booking slot locks in the core services tests; WA sessions in Redis database 13).
+        # (booking slot locks in the core services tests; WA sessions in Redis database 13; realtime
+        # rt:* keys in database 12).
         image: redis:8.10.2-alpine
         ports:
           - 36379:6379
@@ -134,3 +141,6 @@ jobs:
 
       - name: WA Channel integration tests (core services + PostgreSQL + Redis + RabbitMQ)
         run: pnpm wa:test:integration
+
+      - name: Realtime gateway integration tests (core services + PostgreSQL + Redis)
+        run: pnpm rt:test:integration

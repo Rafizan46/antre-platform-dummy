@@ -1,0 +1,135 @@
+:root {
+  --kiosk-accent: #0f766e;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0b1220;
+  color: #f8fafc;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+.kiosk {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 2vw;
+  gap: 2vw;
+}
+
+.kiosk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kiosk-header h1 {
+  margin: 0;
+  font-size: 3vw;
+}
+
+.kiosk-status {
+  font-size: 1.4vw;
+  padding: 0.3vw 1vw;
+  border-radius: 999px;
+  background: #334155;
+}
+
+.kiosk-status-open {
+  background: var(--kiosk-accent);
+}
+
+.kiosk-main {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: 2vw;
+  flex: 1;
+}
+
+.kiosk-counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(22vw, 1fr));
+  gap: 1.5vw;
+  align-content: start;
+}
+
+.kiosk-counter {
+  background: #1e293b;
+  border-radius: 1vw;
+  padding: 1.5vw;
+  text-align: center;
+}
+
+.kiosk-counter h2 {
+  margin: 0;
+  font-size: 2vw;
+  font-weight: 500;
+}
+
+.kiosk-number {
+  margin: 0.5vw 0 0;
+  font-size: 7vw;
+  font-weight: 800;
+  letter-spacing: 0.2vw;
+}
+
+.kiosk-latest {
+  background: var(--kiosk-accent);
+  animation: kiosk-pulse 1s ease-in-out 3;
+}
+
+.kiosk-done {
+  opacity: 0.45;
+}
+
+.kiosk-recent {
+  background: #111827;
+  border-radius: 1vw;
+  padding: 1.5vw;
+  font-size: 1.8vw;
+}
+
+.kiosk-recent h2 {
+  margin-top: 0;
+  font-size: 2vw;
+}
+
+.kiosk-recent ol {
+  margin: 0;
+  padding-left: 2vw;
+}
+
+.kiosk-empty {
+  font-size: 2.5vw;
+  opacity: 0.7;
+}
+
+.kiosk-activate {
+  position: fixed;
+  inset: auto 2vw 2vw auto;
+  padding: 1vw 2vw;
+  font-size: 1.5vw;
+  border: 0;
+  border-radius: 0.8vw;
+  background: #f59e0b;
+  color: #111827;
+  cursor: pointer;
+}
+
+.kiosk-setup {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  font-size: 1.6vw;
+}
+
+@keyframes kiosk-pulse {
+  50% {
+    transform: scale(1.04);
+  }
+}

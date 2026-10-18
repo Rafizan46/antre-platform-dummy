@@ -7,6 +7,7 @@ import { LoginRateLimiter } from './auth/login-rate-limiter.js';
 import { createDummyVerifier } from './auth/password.js';
 import { authenticate, type AppDeps } from './auth/plugin.js';
 import { authRoutes } from './auth/routes.js';
+import { signKioskToken } from './auth/kiosk-tokens.js';
 import { createTokenService } from './auth/tokens.js';
 import { bookingRoutes } from './booking/routes.js';
 import type { SlotLock } from './booking/slot-lock.js';
@@ -21,6 +22,7 @@ import { locationsRoutes } from './locations/routes.js';
 import { serializeRequest } from './log-redaction.js';
 import { paymentRoutes } from './payments/routes.js';
 import { queueRoutes } from './queue/routes.js';
+import { InMemoryKioskRevocations, type KioskRevocations } from './realtime/redis-realtime.js';
 import { tenantsRoutes } from './tenants/routes.js';
 import { usersRoutes } from './users/routes.js';
 
@@ -36,6 +38,8 @@ export interface AppOptions {
   paymentCallbackSecret: string;
   /** Defaults to a no-op publisher; server.ts passes the RabbitMQ publisher. */
   events?: EventPublisher;
+  /** Defaults to an in-memory store; server.ts passes RedisRealtime (S10). */
+  kioskRevocations?: KioskRevocations;
   now?: () => Date;
   /** true = JSON logs to stdout; a stream receives the lines instead (tests). */
   logger?: boolean | { stream: { write(line: string): void }; level?: string };
@@ -63,6 +67,9 @@ export function buildApp(options: AppOptions) {
     waChannelToken: options.waChannelToken,
     slotLock: options.slotLock,
     paymentCallbackSecret: options.paymentCallbackSecret,
+    signKioskToken: (tenantId, locationId) =>
+      signKioskToken({ secret: options.jwtSecret, tenantId, locationId, now: now() }),
+    kioskRevocations: options.kioskRevocations ?? new InMemoryKioskRevocations(),
   };
 
   registerErrorHandling(app);

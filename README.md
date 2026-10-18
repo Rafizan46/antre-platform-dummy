@@ -4,20 +4,20 @@ Monorepo platform SaaS antrean virtual dan reservasi slot multi-tenant untuk UMK
 
 ## Struktur
 
-| Path                       | Isi                                                               | Status                   |
-| -------------------------- | ----------------------------------------------------------------- | ------------------------ |
-| `apps/gateway`             | Konfigurasi API Gateway Traefik (bukan paket Node)                | placeholder              |
-| `apps/core-services`       | Tenant & Auth, Catalog, Queue (Fastify)                           | aktif                    |
-| `apps/wa-channel`          | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)   | aktif                    |
-| `apps/realtime-gateway`    | Realtime SSE Gateway (Fastify)                                    | kerangka, `GET /healthz` |
-| `apps/notification-worker` | Konsumer RabbitMQ pengirim pesan WhatsApp                         | aktif                    |
-| `apps/web-staff`           | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite) | kerangka                 |
-| `packages/shared-types`    | `@antre/shared-types`: enum status dan role                       | aktif                    |
-| `packages/event-contracts` | `@antre/event-contracts`: envelope dan katalog event              | aktif                    |
-| `packages/messaging`       | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event   | aktif                    |
-| `packages/db`              | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS     | aktif                    |
-| `infra/k8s`                | Manifest k3s                                                      | placeholder              |
-| `.github/workflows`        | CI GitHub Actions                                                 | aktif                    |
+| Path                       | Isi                                                               | Status         |
+| -------------------------- | ----------------------------------------------------------------- | -------------- |
+| `apps/gateway`             | Konfigurasi API Gateway Traefik (bukan paket Node)                | placeholder    |
+| `apps/core-services`       | Tenant & Auth, Catalog, Queue (Fastify)                           | aktif          |
+| `apps/wa-channel`          | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)   | aktif          |
+| `apps/realtime-gateway`    | Realtime SSE Gateway (Fastify)                                    | aktif          |
+| `apps/notification-worker` | Konsumer RabbitMQ pengirim pesan WhatsApp                         | aktif          |
+| `apps/web-staff`           | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite) | Kiosk TV aktif |
+| `packages/shared-types`    | `@antre/shared-types`: enum status dan role                       | aktif          |
+| `packages/event-contracts` | `@antre/event-contracts`: envelope dan katalog event              | aktif          |
+| `packages/messaging`       | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event   | aktif          |
+| `packages/db`              | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS     | aktif          |
+| `infra/k8s`                | Manifest k3s                                                      | placeholder    |
+| `.github/workflows`        | CI GitHub Actions                                                 | aktif          |
 
 ## Prasyarat
 
@@ -139,14 +139,14 @@ Reset database dev: `docker compose -f docker-compose.dev.yml down -v`, lalu `up
 Endpoint `/api/v1` (daftar lengkap di `docs/spesifikasi-sistem-antre.md` §8; respons daftar berbentuk objek, mis. `{ "locations": [...] }`):
 
 - Tenant & Auth: `POST /auth/register`, `POST /auth/login`, `GET|POST /users`, `PATCH /users/:id` (OWNER), `GET|PATCH /tenants/me/settings`.
-- Lokasi: `GET|POST /locations`, `PATCH /locations/:id` (tulis: OWNER).
+- Lokasi: `GET|POST /locations`, `PATCH /locations/:id` (tulis: OWNER); token Kiosk TV: `POST /locations/:id/kiosk-tokens` (OWNER, token `KIOSK_DISPLAY` 30 hari) dan `DELETE /locations/:id/kiosk-tokens` (OWNER, mencabut semua token kiosk lokasi yang sudah terbit).
 - Katalog: `GET|POST /catalog/services`, `PATCH /catalog/services/:id`, `GET|POST /catalog/resources`, `PATCH /catalog/resources/:id`, `GET|PUT /catalog/locations/:location_id/operating-hours`.
 - Antrean: `POST|GET /queues/tickets`, `POST /queues/tickets/call-next`, `POST /queues/tickets/:id/actions` (RECALL, SERVE, COMPLETE, NO_SHOW).
 - Reservasi: `GET /bookings?location_id&date` (kalender slot; OWNER, STAFF_CALLER, STAFF_CASHIER), `POST /bookings/:id/actions` (COMPLETE, NO_SHOW, CANCEL; OWNER, STAFF_CASHIER).
 - Pembayaran (tanpa JWT, dipanggil penyedia QRIS): `POST /payments/qris/callback`. Body JSON mentah ditandatangani HMAC-SHA256 dengan `PAYMENT_CALLBACK_SECRET`, dikirim di header `X-Antre-Signature: sha256=<hex>`; callback diproses idempoten per `payment_ref`.
 - Internal untuk WhatsApp Channel Service (`/internal/v1`, jangan dirutekan lewat gateway publik): `GET /locations/resolve?slug=&code=`, `GET /locations/:id/wa-context`, `GET /customers/active-items?customer_phone=`, `POST /queues/tickets`, `GET /queues/tickets/active`, `POST /queues/tickets/:id/cancel`, `GET /catalog/services`, `GET /bookings/available-slots`, `POST /bookings/holds`, `GET /bookings/active`, `POST /bookings/:id/cancel`. Header `Authorization: Bearer <WA_CHANNEL_SERVICE_TOKEN>` dan `X-Antre-Tenant-Id`, kecuali `locations/resolve` dan `customers/active-items` yang berjalan tanpa tenant (fungsi `app_resolve_location` dan `app_find_active_by_phone`; header tenant diabaikan).
 
-Service terhubung ke PostgreSQL sebagai `antre_app` (`DATABASE_APP_URL`) dan membaca `JWT_SECRET`, `WA_CHANNEL_SERVICE_TOKEN`, dan `PAYMENT_CALLBACK_SECRET` dari lingkungan (masing-masing minimal 32 karakter; nilai `dev-only...` di `.env.example` hanya untuk dev dan ditolak saat `NODE_ENV=production`). Host dan port listen dari `CORE_SERVICES_HOST` (default `127.0.0.1`) dan `CORE_SERVICES_PORT` (default `3000`). Hold slot reservasi memakai lock Redis (`REDIS_URL`, mis. `redis://127.0.0.1:36379`; key `lock:slot:<resource_id>:<slot_start>` selama 5 menit, dilepas dengan skrip Lua compare-and-delete). Jika Redis mati, hold tetap berjalan dan dijaga unique index `bookings_active_slot_key` (bentrok menjadi 409 `SLOT_TAKEN`); server tidak berhenti. Dua job berjalan tiap menit di server: kedaluwarsa hold (EXPIRED dan lepas lock) dan pengingat 30 menit sebelum jadwal (`booking.reservation.reminder_due`); aman untuk beberapa replika. Event `queue.*`, `booking.*`, dan `billing.quota.*` dipublikasikan ke exchange `antre.events` (RabbitMQ, `RABBITMQ_URL`) setelah commit, dengan publisher confirms dan pesan persistent. Jika RabbitMQ mati, request tetap berhasil: event disimpan di buffer memori (maks. 1000, terlama dibuang bila penuh) dan dikirim berurutan setelah koneksi pulih; buffer hilang bila proses berhenti saat broker mati (tanpa outbox, lihat spesifikasi §9.5).
+Service terhubung ke PostgreSQL sebagai `antre_app` (`DATABASE_APP_URL`) dan membaca `JWT_SECRET`, `WA_CHANNEL_SERVICE_TOKEN`, dan `PAYMENT_CALLBACK_SECRET` dari lingkungan (masing-masing minimal 32 karakter; nilai `dev-only...` di `.env.example` hanya untuk dev dan ditolak saat `NODE_ENV=production`). Host dan port listen dari `CORE_SERVICES_HOST` (default `127.0.0.1`) dan `CORE_SERVICES_PORT` (default `3000`). Hold slot reservasi memakai lock Redis (`REDIS_URL`, mis. `redis://127.0.0.1:36379`; key `lock:slot:<resource_id>:<slot_start>` selama 5 menit, dilepas dengan skrip Lua compare-and-delete). Jika Redis mati, hold tetap berjalan dan dijaga unique index `bookings_active_slot_key` (bentrok menjadi 409 `SLOT_TAKEN`); server tidak berhenti. Dua job berjalan tiap menit di server: kedaluwarsa hold (EXPIRED dan lepas lock) dan pengingat 30 menit sebelum jadwal (`booking.reservation.reminder_due`); aman untuk beberapa replika. Event `queue.*`, `booking.*`, dan `billing.quota.*` dipublikasikan ke exchange `antre.events` (RabbitMQ, `RABBITMQ_URL`) setelah commit, dengan publisher confirms dan pesan persistent. Jika RabbitMQ mati, request tetap berhasil: event disimpan di buffer memori (maks. 1000, terlama dibuang bila penuh) dan dikirim berurutan setelah koneksi pulih; buffer hilang bila proses berhenti saat broker mati (tanpa outbox, lihat spesifikasi §9.5). Sejak S10 setiap event `queue.*` dan `booking.reservation.*` (kecuali `reminder_due`) juga ditulis ke Redis setelah commit untuk Realtime SSE Gateway: satu skrip Lua menambah update ringkas tanpa PII ke stream `rt:log:{tenant_id}:{location_id}` (MAXLEN ~500, kedaluwarsa 24 jam) dan mem-PUBLISH-nya ke channel `rt:{tenant_id}:{location_id}`; Redis mati tidak menggagalkan request (dicatat di log).
 
 ```sh
 pnpm --filter @antre/core-services build   # bundel Vite SSR ke apps/core-services/dist/server.js
@@ -201,12 +201,34 @@ pnpm wa:test:integration                # core-services tertanam + PostgreSQL + 
 
 `pnpm wa:test:integration` membuat database `antre_it_wa` dan vhost `antre_it_wa`, memakai Redis database 13 (hanya kunci `wa:*` dan `lock:slot:*` yang dihapus), lalu membersihkan semuanya.
 
+## Realtime SSE Gateway (`apps/realtime-gateway`)
+
+Pembaruan live untuk Dashboard petugas dan Kiosk TV (spesifikasi §3.6, §5.1). Pelanggan tidak memakai SSE (hanya WhatsApp). Tanpa database; sumbernya Redis yang ditulis core-services setelah commit.
+
+- `GET /api/v1/realtime/locations/:location_id/stream` (`text/event-stream`). Token lewat `?access_token=` (EventSource tidak bisa mengirim header) atau `Authorization: Bearer`; query tidak pernah dicatat di log. `OWNER`/`STAFF_*`: channel `rt:{tenant token}:{location_id}`, jadi lokasi tenant lain hanya menghasilkan stream kosong. `KIOSK_DISPLAY`: hanya lokasi di token, ditolak 401 bila diterbitkan sebelum pencabutan terakhir (`rt:kiosk-revoked:{tenant}:{location}`). `SUPER_ADMIN` dan token servis 403; token salah/kedaluwarsa 401; Redis mati 503; batas koneksi 429.
+- Format: `retry:` lalu `event: snapshot` (`{"updates":[...]}`, 50 update terakhir) atau, dengan `Last-Event-ID` (header, atau `?last_event_id=`), replay `event: update` yang terlewat (maks. 200; lebih dari itu atau di luar log = snapshot). Setiap `event: update` membawa `id` = id stream Redis dan satu `RealtimeUpdate` (`type`, `event_id`, `at`, `location_id`, `status`, serta bila ada `ticket_id`, `ticket_number`, `booking_id`, `service_name`, `resource_name`, `is_recall`, `people_ahead`, `start_time`, `end_time`; tanpa nama/nomor pelanggan). Heartbeat `: ping` tiap 15 s.
+- Satu langganan Pub/Sub per channel (dilepas bersama stream terakhir). Klien yang tidak menguras socket (buffer > 256 KiB) diputus dan menyambung ulang dengan `Last-Event-ID`. Stream berakhir paling lama setelah 1 jam atau saat token kedaluwarsa. Redis putus: semua stream ditutup, `/readyz` 503, stream baru 503 sampai Redis kembali. `SIGINT`/`SIGTERM`: semua stream diakhiri lalu server berhenti.
+- Lingkungan: `JWT_SECRET` (sama dengan core-services), `REDIS_URL`; opsional `REALTIME_HOST`/`REALTIME_PORT` (`127.0.0.1:3300`: stream, `GET /healthz`, `GET /readyz`, `GET /metrics`), `REALTIME_HEARTBEAT_MS` (15000), `REALTIME_RETRY_MS` (3000), `REALTIME_MAX_CONNECTIONS` (5000), `REALTIME_MAX_CONNECTIONS_PER_TENANT` (100), `REALTIME_MAX_STREAM_SECONDS` (3600), `REALTIME_MAX_BUFFERED_BYTES` (262144), `REALTIME_SNAPSHOT_SIZE` (50), `REALTIME_REPLAY_LIMIT` (200), `LOG_LEVEL`.
+
+```sh
+pnpm --filter @antre/realtime-gateway build   # bundel Vite SSR ke apps/realtime-gateway/dist/server.js
+pnpm --filter @antre/realtime-gateway start   # jalankan hasil build
+pnpm --filter @antre/realtime-gateway dev     # build lalu jalankan dengan nilai dev dari .env.example
+pnpm rt:test:integration                      # core-services tertanam + PostgreSQL + Redis nyata (proxy TCP untuk simulasi Redis mati)
+```
+
+`pnpm rt:test:integration` membuat database `antre_it_rt` dan memakai Redis database 12 (kunci `rt:*` dan `lock:slot:*` dihapus sebelum dan sesudah).
+
+### Kiosk TV (`apps/web-staff/kiosk.html`)
+
+Entry terpisah dari dashboard (bundle JS awal ~227 KB, ~72 KB gzip). Pasang sekali dengan membuka `kiosk.html?token=<token KIOSK_DISPLAY>`: token disimpan di `localStorage` dan dihapus dari address bar; lokasi dibaca dari token. Menampilkan loket/resource dengan nomor yang sedang dipanggil dan 6 panggilan terakhir, update live lewat SSE dengan reconnect otomatis (backoff 1-30 s, melanjutkan dari id terakhir). Setiap panggilan baru (termasuk panggilan ulang) membunyikan chime dua nada (WebAudio, tanpa file audio) lalu TTS bahasa Indonesia (`SpeechSynthesis`, `id-ID`, mis. "Nomor antrean A, dua belas, silakan menuju Loket 1."). Browser hanya mengizinkan audio setelah interaksi: ketuk tombol aktivasi sekali (sekaligus layar penuh), atau jalankan Chromium kiosk dengan `--autoplay-policy=no-user-gesture-required --kiosk`. Dev: `pnpm --filter @antre/web-staff dev` mem-proxy `/api/v1/realtime` ke `127.0.0.1:3300` (`REALTIME_PROXY_TARGET` mengganti target); gateway tidak mengirim header CORS, jadi Kiosk memakai origin yang sama (`VITE_REALTIME_URL` hanya untuk origin yang mengizinkan CORS).
+
 ## CI
 
 `.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan dua job:
 
-- `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, test, dan build core-services, notification-worker, serta wa-channel.
-- `db-integration`: PostgreSQL 16 (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), Redis 8 (port host 36379, sesuai `REDIS_URL` di `.env.example`), dan RabbitMQ 4.3 dengan management (port host 35672 dan 45672, sesuai `RABBITMQ_URL` dan `RABBITMQ_MANAGEMENT_URL`) sebagai service container, lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, `pnpm core:test:integration` (tes API Tenant & Auth, Catalog, Queue, Booking, callback pembayaran, publish saat broker mati, endpoint internal WhatsApp), `pnpm notif:test:integration`, lalu `pnpm wa:test:integration`.
+- `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, test, dan build core-services, notification-worker, wa-channel, realtime-gateway, serta web-staff.
+- `db-integration`: PostgreSQL 16 (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), Redis 8 (port host 36379, sesuai `REDIS_URL` di `.env.example`), dan RabbitMQ 4.3 dengan management (port host 35672 dan 45672, sesuai `RABBITMQ_URL` dan `RABBITMQ_MANAGEMENT_URL`) sebagai service container, lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, `pnpm core:test:integration` (tes API Tenant & Auth, Catalog, Queue, Booking, callback pembayaran, publish saat broker mati, endpoint internal WhatsApp), `pnpm notif:test:integration`, `pnpm wa:test:integration`, lalu `pnpm rt:test:integration`.
 
 ## Konvensi
 

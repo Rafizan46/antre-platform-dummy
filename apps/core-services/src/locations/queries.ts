@@ -15,6 +15,12 @@ export async function listLocations(client: pg.PoolClient): Promise<LocationDto[
   return result.rows;
 }
 
+/** True when the location exists in the tenant (RLS hides other tenants' locations). */
+export async function locationExists(client: pg.PoolClient, id: string): Promise<boolean> {
+  const result = await client.query('SELECT 1 FROM locations WHERE id = $1', [id]);
+  return result.rowCount === 1;
+}
+
 /** Inserts the location and its FREE subscription. Unique violations bubble up to the route. */
 export async function insertLocation(
   client: pg.PoolClient,

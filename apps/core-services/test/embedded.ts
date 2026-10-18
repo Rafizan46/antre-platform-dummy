@@ -8,7 +8,8 @@ import pg from 'pg';
 import { buildApp } from '../src/app.js';
 import { RedisSlotLock } from '../src/booking/slot-lock.js';
 import { loadConfig } from '../src/config.js';
-import { InMemoryEventPublisher } from '../src/events/publisher.js';
+import { FanoutEventPublisher, InMemoryEventPublisher } from '../src/events/publisher.js';
+import { RedisRealtime } from '../src/realtime/redis-realtime.js';
 import { ALL_WEEK, apiRequest, bearer, login, registerTenant } from './helpers.js';
 
 export interface EmbeddedCoreServices {
@@ -32,6 +33,11 @@ export interface EmbeddedCoreServices {
 export async function startCoreServices(options: {
   databaseUrl: string;
   redisUrl: string;
+  /**
+   * S10: also publish to the realtime Redis path (update log + Pub/Sub) and store kiosk token
+   * revocations in Redis, as server.ts does. Default false (in-memory events only).
+   */
+  realtime?: boolean;
 }): Promise<EmbeddedCoreServices> {
   const config = loadConfig({
     ...process.env,
@@ -42,13 +48,19 @@ export async function startCoreServices(options: {
   const slotLock = new RedisSlotLock({ url: options.redisUrl, log: { warn: () => undefined } });
   await slotLock.connect();
   const events = new InMemoryEventPublisher();
+  let realtime: RedisRealtime | undefined;
+  if (options.realtime === true) {
+    realtime = new RedisRealtime({ url: options.redisUrl, log: { warn: () => undefined } });
+    await realtime.connect();
+  }
   const app = buildApp({
     pool,
     jwtSecret: config.jwtSecret,
     waChannelToken: config.waChannelToken,
     slotLock,
     paymentCallbackSecret: config.paymentCallbackSecret,
-    events,
+    events: realtime === undefined ? events : new FanoutEventPublisher([events, realtime]),
+    ...(realtime === undefined ? {} : { kioskRevocations: realtime }),
   });
   const address = await app.listen({ host: '127.0.0.1', port: 0 });
   return {
@@ -62,6 +74,7 @@ export async function startCoreServices(options: {
     close: async () => {
       await app.close();
       await slotLock.close();
+      await realtime?.close();
       await pool.end();
     },
   };

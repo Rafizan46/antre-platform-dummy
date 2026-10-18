@@ -8,6 +8,8 @@ import type { SlotLock } from '../booking/slot-lock.js';
 import { withTransaction } from '../db/transaction.js';
 import { AppError } from '../errors.js';
 import type { EventPublisher } from '../events/publisher.js';
+import type { KioskRevocations } from '../realtime/redis-realtime.js';
+import type { KioskToken } from './kiosk-tokens.js';
 import type { LoginRateLimiter } from './login-rate-limiter.js';
 import type { AuthContext, TokenService } from './tokens.js';
 
@@ -25,6 +27,10 @@ export interface AppDeps {
   slotLock: SlotLock;
   /** HMAC secret of the QRIS payment callback (spec section 7.4). */
   paymentCallbackSecret: string;
+  /** Issues a KIOSK_DISPLAY token for a location (FR-REALTIME-02). */
+  signKioskToken: (tenantId: string, locationId: string) => Promise<KioskToken>;
+  /** Revocation store of the KIOSK_DISPLAY tokens (Redis, read by the Realtime SSE Gateway). */
+  kioskRevocations: KioskRevocations;
 }
 
 declare module 'fastify' {
