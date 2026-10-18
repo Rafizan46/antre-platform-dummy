@@ -27,6 +27,8 @@ export interface NotificationWorkerOptions {
   rabbitmqUrl: string;
   adapter: WhatsAppAdapter;
   templateLanguage: string;
+  /** QRIS simulator link base of the DP message (null = no link). */
+  qrisSimulatorUrl?: string | null;
   prefetch: number;
   retryDelaysMs: readonly number[];
   log: Logger;
@@ -84,6 +86,7 @@ export class NotificationWorker {
       pool: options.pool,
       adapter: options.adapter,
       templateLanguage: options.templateLanguage,
+      qrisSimulatorUrl: options.qrisSimulatorUrl ?? null,
       log: options.log,
       metrics: this.metrics,
     });

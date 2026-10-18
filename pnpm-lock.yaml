@@ -215,10 +215,34 @@ importers:
 
   apps/wa-channel:
     dependencies:
+      '@antre/event-contracts':
+        specifier: workspace:*
+        version: link:../../packages/event-contracts
+      '@antre/messaging':
+        specifier: workspace:*
+        version: link:../../packages/messaging
+      '@antre/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+      '@redis/client':
+        specifier: 'catalog:'
+        version: 6.3.0
+      amqplib:
+        specifier: 'catalog:'
+        version: 2.2.0
       fastify:
         specifier: 'catalog:'
         version: 5.12.7
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
     devDependencies:
+      '@antre/core-services':
+        specifier: workspace:*
+        version: link:../core-services
+      '@antre/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5

@@ -7,6 +7,7 @@ const NAMES = Object.keys(TEMPLATES) as TemplateName[];
 describe('templates', () => {
   it('cover the template names of the event catalog (spec 7.1)', () => {
     expect(NAMES.sort()).toEqual([
+      'antre_booking_cancelled',
       'antre_booking_confirmed',
       'antre_booking_expired',
       'antre_booking_payment',

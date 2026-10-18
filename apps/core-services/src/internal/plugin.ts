@@ -15,6 +15,13 @@ declare module 'fastify' {
   interface FastifyRequest {
     internalTenantId: string | null;
   }
+  interface FastifyContextConfig {
+    /**
+     * The route runs before the tenant is known (locations/resolve, customers/active-items, spec
+     * section 8): X-Antre-Tenant-Id is not required and is ignored.
+     */
+    tenantless?: boolean;
+  }
 }
 
 const BEARER_PATTERN = /^Bearer ([^\s]+)$/;
@@ -28,7 +35,7 @@ function tokenMatches(presented: string, expected: string): boolean {
   return timingSafeEqual(sha256(presented), sha256(expected));
 }
 
-/** onRequest hook: service token first (401), then the tenant header (400). */
+/** onRequest hook: service token first (401), then the tenant header (400) unless tenantless. */
 export function authenticateInternal(deps: AppDeps) {
   return async (request: FastifyRequest): Promise<void> => {
     const header = request.headers.authorization;
@@ -37,6 +44,10 @@ export function authenticateInternal(deps: AppDeps) {
       throw new AppError('UNAUTHORIZED', 'Autentikasi diperlukan atau token tidak valid.');
     }
 
+    if (request.routeOptions.config?.tenantless === true) {
+      request.internalTenantId = null;
+      return;
+    }
     const tenantId = uuidSchema.safeParse(request.headers['x-antre-tenant-id']);
     if (!tenantId.success) {
       throw new AppError('VALIDATION_ERROR', 'Header X-Antre-Tenant-Id wajib berupa uuid.');

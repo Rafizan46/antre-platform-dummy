@@ -6,3 +6,4 @@ export * from './enums.js';
 export * from './errors.js';
 export * from './queue.js';
 export * from './transitions.js';
+export * from './wa-channel.js';

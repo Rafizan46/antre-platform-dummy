@@ -24,6 +24,7 @@ import {
   fallbackContext,
   isMessageEvent,
   type MessageEventType,
+  type NotificationOptions,
 } from './notifications.js';
 import { describeFailure, type Failure } from './retry.js';
 import type { WhatsAppAdapter } from './whatsapp/adapter.js';
@@ -40,6 +41,8 @@ export interface ProcessorDeps {
   pool: pg.Pool;
   adapter: WhatsAppAdapter;
   templateLanguage: string;
+  /** QRIS simulator link base of the DP message (null = no link). */
+  qrisSimulatorUrl?: string | null;
   log: Logger;
   metrics: Metrics;
 }
@@ -96,7 +99,12 @@ export class NotificationProcessor {
 
   /** wa.reply.requested without a tenant: sent but not logged in notification_logs (7.1). */
   private async sendUntenanted(event: EventEnvelope<MessageEventType>): Promise<ProcessOutcome> {
-    const planned = buildNotification(event, fallbackContext(event), this.deps.templateLanguage);
+    const planned = buildNotification(
+      event,
+      fallbackContext(event),
+      this.deps.templateLanguage,
+      this.options(),
+    );
     if (planned === null) return this.skipped(event);
     const result = await this.deps.adapter.send(planned.message, {
       idempotencyKey: event.event_id,
@@ -124,7 +132,7 @@ export class NotificationProcessor {
       const context =
         (event.location !== null ? await readContext(client, event.location.id) : null) ??
         fallbackContext(event);
-      const planned = buildNotification(event, context, templateLanguage);
+      const planned = buildNotification(event, context, templateLanguage, this.options());
       if (planned === null) return this.skipped(event);
 
       const content = planned.message.content;
@@ -179,6 +187,10 @@ export class NotificationProcessor {
       );
       return { status: 'sent', providerMessageId: result.providerMessageId } as const;
     });
+  }
+
+  private options(): NotificationOptions {
+    return { qrisSimulatorUrl: this.deps.qrisSimulatorUrl ?? null };
   }
 
   private skipped(event: EventEnvelope): ProcessOutcome {

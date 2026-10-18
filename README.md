@@ -8,7 +8,7 @@ Monorepo platform SaaS antrean virtual dan reservasi slot multi-tenant untuk UMK
 | -------------------------- | ----------------------------------------------------------------- | ------------------------ |
 | `apps/gateway`             | Konfigurasi API Gateway Traefik (bukan paket Node)                | placeholder              |
 | `apps/core-services`       | Tenant & Auth, Catalog, Queue (Fastify)                           | aktif                    |
-| `apps/wa-channel`          | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)   | kerangka, `GET /healthz` |
+| `apps/wa-channel`          | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)   | aktif                    |
 | `apps/realtime-gateway`    | Realtime SSE Gateway (Fastify)                                    | kerangka, `GET /healthz` |
 | `apps/notification-worker` | Konsumer RabbitMQ pengirim pesan WhatsApp                         | aktif                    |
 | `apps/web-staff`           | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite) | kerangka                 |
@@ -96,7 +96,7 @@ Port host memakai pola port default + 30000 dan hanya terikat ke `127.0.0.1`, se
 
 Bila port host sudah terpakai, ubah variabel `*_HOST_PORT` di `.env`. Di Windows, hindari port 49152 sampai 65535 (rentang port dinamis yang bisa direservasi Hyper-V/WSL; cek dengan `netsh interface ipv4 show excludedportrange protocol=tcp`).
 
-Topologi RabbitMQ (`antre.events` dan queue `notifications.*`) dideklarasikan otomatis oleh core-services dan Notification Worker saat terhubung (bagian Notification Worker). Mock WhatsApp Cloud API berupa adapter sandbox di dalam worker; simulator pembayaran QRIS dan queue `wa.inbound` belum ada dan ditambahkan di workstream terkait. Role dan skema database ada di `packages/db` (bagian berikut).
+Topologi RabbitMQ (`antre.events`, queue `notifications.*`, dan `wa.inbound*`) dideklarasikan otomatis oleh setiap service saat terhubung (bagian Notification Worker). Mock WhatsApp Cloud API berupa adapter sandbox di dalam worker; webhook masuk disimulasikan dengan POST bertanda tangan ke WA Channel Service (bagian WA Channel Service). Simulator pembayaran QRIS belum ada dan ditambahkan di workstream terkait. Role dan skema database ada di `packages/db` (bagian berikut).
 
 ## Database (`packages/db`)
 
@@ -144,7 +144,7 @@ Endpoint `/api/v1` (daftar lengkap di `docs/spesifikasi-sistem-antre.md` §8; re
 - Antrean: `POST|GET /queues/tickets`, `POST /queues/tickets/call-next`, `POST /queues/tickets/:id/actions` (RECALL, SERVE, COMPLETE, NO_SHOW).
 - Reservasi: `GET /bookings?location_id&date` (kalender slot; OWNER, STAFF_CALLER, STAFF_CASHIER), `POST /bookings/:id/actions` (COMPLETE, NO_SHOW, CANCEL; OWNER, STAFF_CASHIER).
 - Pembayaran (tanpa JWT, dipanggil penyedia QRIS): `POST /payments/qris/callback`. Body JSON mentah ditandatangani HMAC-SHA256 dengan `PAYMENT_CALLBACK_SECRET`, dikirim di header `X-Antre-Signature: sha256=<hex>`; callback diproses idempoten per `payment_ref`.
-- Internal untuk WhatsApp Channel Service (`/internal/v1`, jangan dirutekan lewat gateway publik): `POST /queues/tickets`, `GET /queues/tickets/active`, `POST /queues/tickets/:id/cancel`, `GET /catalog/services`, `GET /bookings/available-slots`, `POST /bookings/holds`, `GET /bookings/active`, `POST /bookings/:id/cancel`. Header `Authorization: Bearer <WA_CHANNEL_SERVICE_TOKEN>` dan `X-Antre-Tenant-Id`.
+- Internal untuk WhatsApp Channel Service (`/internal/v1`, jangan dirutekan lewat gateway publik): `GET /locations/resolve?slug=&code=`, `GET /locations/:id/wa-context`, `GET /customers/active-items?customer_phone=`, `POST /queues/tickets`, `GET /queues/tickets/active`, `POST /queues/tickets/:id/cancel`, `GET /catalog/services`, `GET /bookings/available-slots`, `POST /bookings/holds`, `GET /bookings/active`, `POST /bookings/:id/cancel`. Header `Authorization: Bearer <WA_CHANNEL_SERVICE_TOKEN>` dan `X-Antre-Tenant-Id`, kecuali `locations/resolve` dan `customers/active-items` yang berjalan tanpa tenant (fungsi `app_resolve_location` dan `app_find_active_by_phone`; header tenant diabaikan).
 
 Service terhubung ke PostgreSQL sebagai `antre_app` (`DATABASE_APP_URL`) dan membaca `JWT_SECRET`, `WA_CHANNEL_SERVICE_TOKEN`, dan `PAYMENT_CALLBACK_SECRET` dari lingkungan (masing-masing minimal 32 karakter; nilai `dev-only...` di `.env.example` hanya untuk dev dan ditolak saat `NODE_ENV=production`). Host dan port listen dari `CORE_SERVICES_HOST` (default `127.0.0.1`) dan `CORE_SERVICES_PORT` (default `3000`). Hold slot reservasi memakai lock Redis (`REDIS_URL`, mis. `redis://127.0.0.1:36379`; key `lock:slot:<resource_id>:<slot_start>` selama 5 menit, dilepas dengan skrip Lua compare-and-delete). Jika Redis mati, hold tetap berjalan dan dijaga unique index `bookings_active_slot_key` (bentrok menjadi 409 `SLOT_TAKEN`); server tidak berhenti. Dua job berjalan tiap menit di server: kedaluwarsa hold (EXPIRED dan lepas lock) dan pengingat 30 menit sebelum jadwal (`booking.reservation.reminder_due`); aman untuk beberapa replika. Event `queue.*`, `booking.*`, dan `billing.quota.*` dipublikasikan ke exchange `antre.events` (RabbitMQ, `RABBITMQ_URL`) setelah commit, dengan publisher confirms dan pesan persistent. Jika RabbitMQ mati, request tetap berhasil: event disimpan di buffer memori (maks. 1000, terlama dibuang bila penuh) dan dikirim berurutan setelah koneksi pulih; buffer hilang bila proses berhenti saat broker mati (tanpa outbox, lihat spesifikasi §9.5).
 
@@ -164,10 +164,10 @@ pnpm core:test:integration   # tes API + DB di database sementara antre_it_core 
 
 Konsumer queue `notifications.wa` (spesifikasi §3.5, §7.1): memetakan event ke template WhatsApp, mengirim lewat `WhatsAppAdapter`, dan mencatat setiap pesan ber-tenant di `notification_logs` (koneksi `antre_app`, tenant dari envelope dengan `SET LOCAL`). `wa.status.received` memperbarui `delivery_status` lewat `app_wa_update_delivery_status`.
 
-- Topologi (dideklarasikan idempoten oleh setiap service saat terhubung, `packages/messaging/src/topology.ts`): exchange topic `antre.events`; queue `notifications.wa` terikat ke 12 routing key bertanda `notifications.wa` di katalog §7.1; queue tunda `notifications.wa.retry.1`/`.2`/`.3` (TTL per pesan 5 s, 25 s, 125 s, lalu kembali ke `notifications.wa`); `notifications.dlq` untuk audit (RabbitMQ Management).
+- Topologi (dideklarasikan idempoten oleh setiap service saat terhubung, `packages/messaging/src/topology.ts`): exchange topic `antre.events`; queue `notifications.wa` terikat ke 13 routing key bertanda `notifications.wa` di katalog §7.1; queue tunda `notifications.wa.retry.1`/`.2`/`.3` (TTL per pesan 5 s, 25 s, 125 s, lalu kembali ke `notifications.wa`); `notifications.dlq` untuk audit (RabbitMQ Management).
 - Kegagalan: `unavailable` (jaringan, HTTP 5xx) dan `rate_limited` (HTTP 429, kode rate limit Cloud API) di-retry 3 kali lalu masuk DLQ (`delivery_status = DLQ`); `rejected` (4xx lain, mis. template tidak ada) langsung ke DLQ; pesan yang bukan event valid ditolak broker ke DLQ. Header DLQ: `x-antre-retry`, `x-antre-error`, `x-antre-error-kind`, `x-antre-failed-at`, `x-antre-routing-key`.
 - Idempoten per `event_id`: baris log diklaim dengan `INSERT ... ON CONFLICT` (unik `(tenant_id, event_id)`, migrasi `1792285200000_notification-log-event-key`) dan `SELECT ... FOR UPDATE`; event duplikat atau redelivery tidak dikirim dua kali. Balasan `wa.reply.requested` tanpa tenant tidak dicatat di tabel (hanya log aplikasi dan metrik `antre_wa_untenanted_replies_total`).
-- Template (nama dan teks yang diajukan ke Meta, bahasa `id`): `apps/notification-worker/src/templates.ts`. Sapaan (`branding.wa_greeting`), label resource, nama lokasi, dan zona waktu (WIB/WITA/WIT) dibaca dari database tenant.
+- Template (nama dan teks yang diajukan ke Meta, bahasa `id`): `apps/notification-worker/src/templates.ts`. Sapaan (`branding.wa_greeting`), label resource, nama lokasi, dan zona waktu (WIB/WITA/WIT) dibaca dari database tenant. Sejak S09 ada 11 template: `antre_booking_cancelled` (setiap pembatalan booking: `BATAL` pelanggan, `CANCEL` petugas, nominal salah) dan baris "QRIS (simulasi)" pada `antre_booking_payment` (tautan `<QRIS_SIMULATOR_URL>/<payment_ref>` bila env itu diisi, selain itu teks "pembayaran simulasi").
 - Adapter: `WA_ADAPTER=sandbox` (default; tidak ada pesan keluar, setiap pesan dicatat di log dengan nomor disamarkan, wamid `wamid.SANDBOX.*` deterministik) atau `WA_ADAPTER=meta` (WhatsApp Cloud API; butuh `META_WA_ACCESS_TOKEN` dan `META_WA_PHONE_NUMBER_ID`, opsional `META_WA_API_VERSION`, `META_WA_API_BASE_URL`).
 - Lingkungan: `DATABASE_APP_URL`, `RABBITMQ_URL`, `NOTIFICATION_PREFETCH` (default 10), `NOTIFICATION_RETRY_DELAYS_MS` (default `5000,25000,125000`), `WA_TEMPLATE_LANGUAGE` (default `id`), `LOG_LEVEL`, `NOTIFICATION_WORKER_HOST`/`NOTIFICATION_WORKER_PORT` (default `127.0.0.1:3100`: `GET /healthz`, `GET /readyz` 503 bila tidak terhubung ke broker, `GET /metrics` format Prometheus).
 - Broker mati saat start tidak fatal: worker terus mencoba terhubung (backoff 0,5 s sampai 30 s). `SIGINT`/`SIGTERM`: berhenti mengonsumsi, menunggu pesan yang sedang diproses (maks. 30 s), lalu menutup koneksi.
@@ -181,12 +181,32 @@ pnpm notif:test:integration                      # tes worker + publisher terhad
 
 `pnpm notif:test:integration` membuat database `antre_it_notif` dan vhost RabbitMQ `antre_it_notif` (lewat management API `RABBITMQ_MANAGEMENT_URL`, kredensial dari `RABBITMQ_URL`), lalu menghapus keduanya; vhost `/` dan database `antre` tidak disentuh. Retry di tes memakai backoff pendek (100, 200, 300 ms).
 
+## WA Channel Service (`apps/wa-channel`)
+
+Pintu masuk pelanggan (spesifikasi §3.8, §5.2): webhook WhatsApp Cloud API dan mesin percakapan. Tanpa koneksi database; data diambil lewat `/internal/v1` core-services. Semua pesan keluar dikirim Notification Worker.
+
+- `GET /api/v1/channels/wa/webhook`: verifikasi langganan (`hub.mode=subscribe`, `hub.verify_token` = `WA_VERIFY_TOKEN`, jawab `hub.challenge`; selain itu 403).
+- `POST /api/v1/channels/wa/webhook`: `X-Hub-Signature-256` (HMAC-SHA256 raw body dengan `WA_APP_SECRET`, konstan-waktu; salah = 401), body maks. 256 KiB, parsing zod per pesan. Broker tidak terhubung = 503 tanpa menulis kunci dedup (Meta mengirim ulang). `messages[]` di-dedup `SET wa:msg:{wamid} 1 NX EX 86400` lalu diterbitkan sebagai `wa.message.received`; `statuses[]` sebagai `wa.status.received` (keduanya `tenant = null`); dijawab 200 tanpa menunggu percakapan.
+- Konsumer `wa.inbound` (retry 5/25/125 s lewat `wa.inbound.retry.1-3`, lalu `wa.inbound.dlq` dan balasan permintaan maaf): idempoten per wamid (`wa:proc:{wamid}`), satu pesan per nomor sekaligus (`wa:lock:{phone}`), rate limit 20 pesan/menit/nomor (`wa:rl:{phone}`, satu peringatan lalu diam), jendela 24 jam.
+- Percakapan (sesi `wa:conv:{phone}`, TTL 30 menit sejak pesan terakhir): `ANTRE <slug> <kode_lokasi>` → menu tombol sesuai `service_mode` (Ambil Antrean / Reservasi / Cek Status) → layanan → tiket; atau layanan → tanggal (hari dengan slot kosong dalam 7 hari) → slot (9 per halaman + "Slot berikutnya") → hold. Konfirmasi tiket/booking dikirim worker dari event domain (template). Perintah global `MENU`, `STATUS`, `BATAL`, `BANTUAN`, `STOP` (mengakhiri sesi); `STATUS`/`BATAL` tetap berfungsi tanpa sesi lewat nomor pengirim terverifikasi. Pilihan bernomor di setiap pesan interaktif; 3 jawaban tidak dikenali berturut-turut = kembali ke menu.
+- Balasan = event `wa.reply.requested` (≤1 per pesan masuk, menjaga urutan). Log hanya memuat nomor tersamar dan tidak memuat isi pesan atau secret.
+- Lingkungan: `WA_VERIFY_TOKEN`, `WA_APP_SECRET`, `WA_CHANNEL_SERVICE_TOKEN`, `CORE_SERVICES_URL`, `REDIS_URL`, `RABBITMQ_URL`; opsional `META_WA_PHONE_NUMBER_ID` (filter nomor), `CORE_REQUEST_TIMEOUT_MS` (5000), `WA_SESSION_TTL_SECONDS` (1800), `WA_RATE_LIMIT_PER_MINUTE` (20), `WA_INBOUND_PREFETCH` (10), `WA_INBOUND_RETRY_DELAYS_MS` (`5000,25000,125000`), `WA_CHANNEL_HOST`/`WA_CHANNEL_PORT` (`127.0.0.1:3200`: webhook, `GET /healthz`, `GET /readyz` 503 bila broker/konsumer/Redis belum siap, `GET /metrics`), `LOG_LEVEL`.
+
+```sh
+pnpm --filter @antre/wa-channel build   # bundel Vite SSR ke apps/wa-channel/dist/server.js
+pnpm --filter @antre/wa-channel start   # jalankan hasil build
+pnpm --filter @antre/wa-channel dev     # build lalu jalankan dengan nilai dev dari .env.example
+pnpm wa:test:integration                # core-services tertanam + PostgreSQL + Redis + RabbitMQ nyata
+```
+
+`pnpm wa:test:integration` membuat database `antre_it_wa` dan vhost `antre_it_wa`, memakai Redis database 13 (hanya kunci `wa:*` dan `lock:slot:*` yang dihapus), lalu membersihkan semuanya.
+
 ## CI
 
 `.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan dua job:
 
-- `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, test, dan build core-services serta notification-worker.
-- `db-integration`: PostgreSQL 16 (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), Redis 8 (port host 36379, sesuai `REDIS_URL` di `.env.example`), dan RabbitMQ 4.3 dengan management (port host 35672 dan 45672, sesuai `RABBITMQ_URL` dan `RABBITMQ_MANAGEMENT_URL`) sebagai service container, lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, `pnpm core:test:integration` (tes API Tenant & Auth, Catalog, Queue, Booking, callback pembayaran, publish saat broker mati), lalu `pnpm notif:test:integration`.
+- `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, test, dan build core-services, notification-worker, serta wa-channel.
+- `db-integration`: PostgreSQL 16 (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), Redis 8 (port host 36379, sesuai `REDIS_URL` di `.env.example`), dan RabbitMQ 4.3 dengan management (port host 35672 dan 45672, sesuai `RABBITMQ_URL` dan `RABBITMQ_MANAGEMENT_URL`) sebagai service container, lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, `pnpm core:test:integration` (tes API Tenant & Auth, Catalog, Queue, Booking, callback pembayaran, publish saat broker mati, endpoint internal WhatsApp), `pnpm notif:test:integration`, lalu `pnpm wa:test:integration`.
 
 ## Konvensi
 

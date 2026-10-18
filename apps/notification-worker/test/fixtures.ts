@@ -103,6 +103,15 @@ export function bookingExpired(
   });
 }
 
+export function bookingCancelled(
+  paymentStatus: 'UNPAID' | 'NOT_REQUIRED' | 'REFUND_PENDING' = 'UNPAID',
+): EventEnvelope<'booking.reservation.cancelled'> {
+  return createEvent('booking.reservation.cancelled', {
+    ...DEFAULT_SCOPE,
+    data: { ...booking, status: 'CANCELLED', payment_status: paymentStatus },
+  });
+}
+
 export function bookingReminder(): EventEnvelope<'booking.reservation.reminder_due'> {
   return createEvent('booking.reservation.reminder_due', {
     ...DEFAULT_SCOPE,

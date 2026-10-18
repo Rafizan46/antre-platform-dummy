@@ -49,6 +49,9 @@ jobs:
       - name: Build notification-worker
         run: pnpm --filter @antre/notification-worker build
 
+      - name: Build wa-channel
+        run: pnpm --filter @antre/wa-channel build
+
   db-integration:
     name: Database, API, and messaging integration tests
     runs-on: ubuntu-latest
@@ -73,7 +76,7 @@ jobs:
           --health-retries 10
       redis:
         # Same image as docker-compose.dev.yml; host port 36379 matches REDIS_URL in .env.example
-        # (booking slot locks in the core services integration tests).
+        # (booking slot locks in the core services tests; WA sessions in Redis database 13).
         image: redis:8.10.2-alpine
         ports:
           - 36379:6379
@@ -128,3 +131,6 @@ jobs:
 
       - name: Notification worker integration tests (PostgreSQL + RabbitMQ)
         run: pnpm notif:test:integration
+
+      - name: WA Channel integration tests (core services + PostgreSQL + Redis + RabbitMQ)
+        run: pnpm wa:test:integration

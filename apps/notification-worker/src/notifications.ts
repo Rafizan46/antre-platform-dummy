@@ -47,6 +47,7 @@ const MESSAGE_EVENT_TYPES: ReadonlySet<string> = new Set<MessageEventType>([
   'booking.reservation.confirmed',
   'booking.reservation.expired',
   'booking.reservation.reminder_due',
+  'booking.reservation.cancelled',
   'billing.quota.warning',
   'billing.quota.exceeded',
   'billing.subscription.activated',
@@ -54,6 +55,26 @@ const MESSAGE_EVENT_TYPES: ReadonlySet<string> = new Set<MessageEventType>([
 ]);
 
 const DEFAULT_RESOURCE_LABEL = 'Tempat';
+
+/** Settings of the worker that shape messages (not per tenant). */
+export interface NotificationOptions {
+  /** Base URL of the QRIS payment simulator; null = no link (spec 7.1, S09). */
+  qrisSimulatorUrl?: string | null;
+}
+
+/** The QRIS line of the DP message: a simulator link, or a note that the payment is simulated. */
+export function qrisText(paymentRef: string, simulatorUrl: string | null | undefined): string {
+  if (simulatorUrl === null || simulatorUrl === undefined) {
+    return 'pembayaran simulasi, tidak ada tagihan nyata';
+  }
+  return `${simulatorUrl}/${encodeURIComponent(paymentRef)}`;
+}
+
+function paymentNote(paymentStatus: string, refundText: string): string {
+  return paymentStatus === 'PAID' || paymentStatus === 'REFUND_PENDING'
+    ? refundText
+    : 'tidak ada pembayaran yang tercatat';
+}
 
 /** Context from the envelope alone, when the location row cannot be read. */
 export function fallbackContext(event: EventEnvelope): NotificationContext {
@@ -89,6 +110,7 @@ export function buildNotification(
   event: EventEnvelope<MessageEventType>,
   context: NotificationContext,
   language: string,
+  options: NotificationOptions = {},
 ): PlannedNotification | null {
   const tz = context.timeZone;
   const resourceLabel = context.resourceLabel ?? DEFAULT_RESOURCE_LABEL;
@@ -160,6 +182,7 @@ export function buildNotification(
           schedule: formatDateTime(data.start_time, tz),
           dp_amount: formatRupiah(data.dp_amount),
           payment_ref: data.payment_ref,
+          qris: qrisText(data.payment_ref, options.qrisSimulatorUrl),
           pay_before: formatTime(data.hold_expires_at, tz),
         },
         language,
@@ -187,7 +210,6 @@ export function buildNotification(
     }
     case 'booking.reservation.expired': {
       const data = event.data;
-      const paid = data.payment_status === 'PAID' || data.payment_status === 'REFUND_PENDING';
       return template(
         data.customer_phone,
         'antre_booking_expired',
@@ -196,9 +218,28 @@ export function buildNotification(
           tenant_name: context.tenantName,
           service_name: data.service_name,
           schedule: formatDateTime(data.start_time, tz),
-          payment_note: paid
-            ? 'pembayaran yang terlambat masuk akan dikembalikan oleh petugas'
-            : 'tidak ada pembayaran yang tercatat',
+          payment_note: paymentNote(
+            data.payment_status,
+            'pembayaran yang terlambat masuk akan dikembalikan oleh petugas',
+          ),
+        },
+        language,
+      );
+    }
+    case 'booking.reservation.cancelled': {
+      const data = event.data;
+      return template(
+        data.customer_phone,
+        'antre_booking_cancelled',
+        {
+          customer_name: data.customer_name,
+          tenant_name: context.tenantName,
+          service_name: data.service_name,
+          schedule: formatDateTime(data.start_time, tz),
+          payment_note: paymentNote(
+            data.payment_status,
+            'DP yang sudah dibayar akan dikembalikan oleh petugas',
+          ),
         },
         language,
       );

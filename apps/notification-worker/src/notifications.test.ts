@@ -2,6 +2,7 @@ import { NOTIFICATION_ROUTING_KEYS } from '@antre/messaging';
 import { describe, expect, it } from 'vitest';
 
 import {
+  bookingCancelled,
   bookingConfirmed,
   bookingExpired,
   bookingHeld,
@@ -42,7 +43,8 @@ function templateOf(planned: ReturnType<typeof buildNotification>): TemplateMess
 describe('buildNotification', () => {
   it('maps every bound routing key except wa.status.received to a message', () => {
     const bound = NOTIFICATION_ROUTING_KEYS.filter((key) => key !== 'wa.status.received');
-    expect(bound).toHaveLength(11);
+    expect(bound).toHaveLength(12);
+    expect(isMessageEvent(bookingCancelled())).toBe(true);
     expect(isMessageEvent(statusReceived('wamid.X', 'DELIVERED'))).toBe(false);
     expect(isMessageEvent(ticketCreated())).toBe(true);
   });
@@ -113,8 +115,16 @@ describe('buildNotification', () => {
       'Selasa, 20 Oktober 2026 pukul 10.00 WIB',
       'Rp50.000',
       'PAY-ABC123',
+      'pembayaran simulasi, tidak ada tagihan nyata',
       '17.05 WIB',
     ]);
+    const linked = templateOf(
+      buildNotification(bookingHeld(), context, 'id', {
+        qrisSimulatorUrl: 'http://127.0.0.1:3300/qris',
+      }),
+    );
+    expect(linked.parameters[8]).toBe('http://127.0.0.1:3300/qris/PAY-ABC123');
+    expect(linked.preview).toContain('QRIS (simulasi): http://127.0.0.1:3300/qris/PAY-ABC123');
 
     const confirmed = templateOf(buildNotification(bookingConfirmed(), CONTEXT, 'id'));
     expect(confirmed.name).toBe('antre_booking_confirmed');
@@ -133,6 +143,24 @@ describe('buildNotification', () => {
     const reminder = templateOf(buildNotification(bookingReminder(), CONTEXT, 'id'));
     expect(reminder.name).toBe('antre_booking_reminder');
     expect(reminder.parameters[2]).toBe('10.00 WIB');
+  });
+
+  it('booking.reservation.cancelled: schedule and refund note for every cancellation (S09)', () => {
+    const unpaid = buildNotification(bookingCancelled(), CONTEXT, 'id');
+    expect(unpaid?.templateName).toBe('antre_booking_cancelled');
+    expect(unpaid?.message.to).toBe('6289876543210');
+    expect(templateOf(unpaid).parameters).toEqual([
+      'Siti Aminah',
+      'Klinik Pratama Sehat',
+      'Sewa Lapangan',
+      'Selasa, 20 Oktober 2026 pukul 10.00 WIB',
+      'tidak ada pembayaran yang tercatat',
+    ]);
+    const refunded = templateOf(
+      buildNotification(bookingCancelled('REFUND_PENDING'), CONTEXT, 'id'),
+    );
+    expect(refunded.parameters[4]).toBe('DP yang sudah dibayar akan dikembalikan oleh petugas');
+    expect(refunded.preview).toContain('telah dibatalkan');
   });
 
   it('billing events go to the admin number of the tenant', () => {

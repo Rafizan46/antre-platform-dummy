@@ -17,6 +17,7 @@ describe('loadWorkerConfig', () => {
       templateLanguage: 'id',
       prefetch: 10,
       retryDelaysMs: [5000, 25000, 125000],
+      qrisSimulatorUrl: null,
       host: '127.0.0.1',
       port: 3100,
       logLevel: 'info',
@@ -75,6 +76,20 @@ describe('loadWorkerConfig', () => {
       'NOTIFICATION_RETRY_DELAYS_MS',
     );
     expect(() => loadWorkerConfig({ ...BASE, LOG_LEVEL: 'loud' })).toThrow('LOG_LEVEL');
+    expect(() => loadWorkerConfig({ ...BASE, QRIS_SIMULATOR_URL: 'ftp://x' })).toThrow(
+      'QRIS_SIMULATOR_URL',
+    );
+    expect(() =>
+      loadWorkerConfig({
+        ...BASE,
+        NODE_ENV: 'production',
+        QRIS_SIMULATOR_URL: 'http://sim.example.test',
+      }),
+    ).toThrow('https');
+    expect(
+      loadWorkerConfig({ ...BASE, QRIS_SIMULATOR_URL: 'http://127.0.0.1:3300/qris/' })
+        .qrisSimulatorUrl,
+    ).toBe('http://127.0.0.1:3300/qris');
     expect(
       loadWorkerConfig({ ...BASE, NOTIFICATION_RETRY_DELAYS_MS: '100, 200,400' }).retryDelaysMs,
     ).toEqual([100, 200, 400]);

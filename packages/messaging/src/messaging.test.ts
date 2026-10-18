@@ -12,6 +12,9 @@ import {
   NOTIFICATIONS_RETRY_QUEUES,
   PublishTimeoutError,
   RabbitEventPublisher,
+  WA_INBOUND_DLQ,
+  WA_INBOUND_QUEUE,
+  WA_INBOUND_RETRY_QUEUES,
   assertTopology,
   describeBroker,
   eventMessageOptions,
@@ -70,12 +73,50 @@ describe('topology', () => {
         { durable: true, deadLetterExchange: '', deadLetterRoutingKey: NOTIFICATIONS_QUEUE },
       ]);
     }
-    const bindings = calls.filter((call) => call[0] === 'bind').map((call) => call[3]);
+    const bindingsOf = (queue: string) =>
+      calls.filter((call) => call[0] === 'bind' && call[1] === queue).map((call) => call[3]);
+    const bindings = bindingsOf(NOTIFICATIONS_QUEUE);
     expect(bindings).toEqual([...NOTIFICATION_ROUTING_KEYS]);
     // Events without a consumer in the catalog have no binding (spec 7.1).
     expect(bindings).not.toContain('queue.ticket.cancelled');
-    expect(bindings).not.toContain('booking.reservation.cancelled');
     expect(bindings).not.toContain('wa.message.received');
+    // S09: the booking cancellation notice is sent by the worker.
+    expect(bindings).toContain('booking.reservation.cancelled');
+  });
+
+  it('declares wa.inbound with its retry queues and DLQ, bound to wa.message.received only', async () => {
+    const calls: unknown[][] = [];
+    const recorder =
+      (name: string) =>
+      async (...args: unknown[]) => {
+        calls.push([name, ...args]);
+        return {};
+      };
+    const channel = {
+      assertExchange: recorder('exchange'),
+      assertQueue: recorder('queue'),
+      bindQueue: recorder('bind'),
+    } as unknown as Channel;
+
+    await assertTopology(channel);
+
+    expect(calls).toContainEqual(['queue', WA_INBOUND_DLQ, { durable: true }]);
+    expect(calls).toContainEqual([
+      'queue',
+      WA_INBOUND_QUEUE,
+      { durable: true, deadLetterExchange: '', deadLetterRoutingKey: WA_INBOUND_DLQ },
+    ]);
+    for (const queue of WA_INBOUND_RETRY_QUEUES) {
+      expect(calls).toContainEqual([
+        'queue',
+        queue,
+        { durable: true, deadLetterExchange: '', deadLetterRoutingKey: WA_INBOUND_QUEUE },
+      ]);
+    }
+    const bindings = calls
+      .filter((call) => call[0] === 'bind' && call[1] === WA_INBOUND_QUEUE)
+      .map((call) => call[3]);
+    expect(bindings).toEqual(['wa.message.received']);
   });
 });
 

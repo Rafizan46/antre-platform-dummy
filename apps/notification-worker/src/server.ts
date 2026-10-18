@@ -31,6 +31,7 @@ async function main(): Promise<void> {
     rabbitmqUrl: config.rabbitmqUrl,
     adapter: createAdapter(config, log),
     templateLanguage: config.templateLanguage,
+    qrisSimulatorUrl: config.qrisSimulatorUrl,
     prefetch: config.prefetch,
     retryDelaysMs: config.retryDelaysMs,
     log,

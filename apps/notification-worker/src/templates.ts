@@ -60,6 +60,7 @@ export const TEMPLATES = {
       'schedule',
       'dp_amount',
       'payment_ref',
+      'qris',
       'pay_before',
     ],
     body:
@@ -68,8 +69,18 @@ export const TEMPLATES = {
       '{{4}}: {{5}}\n' +
       'Jadwal: {{6}}\n' +
       'DP: {{7}}\n' +
-      'Kode pembayaran: {{8}}\n\n' +
-      'Bayar lewat QRIS sebelum {{9}}. Setelah itu slot dilepas otomatis.',
+      'Kode pembayaran: {{8}}\n' +
+      'QRIS (simulasi): {{9}}\n\n' +
+      'Bayar lewat QRIS sebelum {{10}}. Setelah itu slot dilepas otomatis.',
+  },
+  antre_booking_cancelled: {
+    variables: ['customer_name', 'tenant_name', 'service_name', 'schedule', 'payment_note'],
+    body:
+      'Halo {{1}}, reservasi Anda di {{2}} telah dibatalkan.\n\n' +
+      'Layanan: {{3}}\n' +
+      'Jadwal: {{4}}\n' +
+      'Pembayaran: {{5}}\n\n' +
+      'Silakan pesan ulang lewat menu Reservasi bila masih diperlukan.',
   },
   antre_booking_confirmed: {
     variables: [

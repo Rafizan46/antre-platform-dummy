@@ -23,6 +23,11 @@ export interface WorkerConfig {
   prefetch: number;
   /** Delay before retry 1, 2, and 3. */
   retryDelaysMs: number[];
+  /**
+   * Base URL of the QRIS payment simulator (S09): the DP message links to `<url>/<payment_ref>`.
+   * null = the message says the payment is simulated without a link.
+   */
+  qrisSimulatorUrl: string | null;
   host: string;
   port: number;
   logLevel: LogLevel;
@@ -85,6 +90,24 @@ function readMeta(env: NodeJS.ProcessEnv): MetaCloudConfig {
   return { accessToken, phoneNumberId, apiVersion, baseUrl: baseUrl.replace(/\/+$/, '') };
 }
 
+function readQrisSimulatorUrl(env: NodeJS.ProcessEnv): string | null {
+  const value = present(env.QRIS_SIMULATOR_URL);
+  if (value === undefined) return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('QRIS_SIMULATOR_URL must be an http(s) URL');
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error('QRIS_SIMULATOR_URL must be an http(s) URL');
+  }
+  if (url.protocol !== 'https:' && env.NODE_ENV === 'production') {
+    throw new Error('QRIS_SIMULATOR_URL must use https in production');
+  }
+  return value.replace(/\/+$/, '');
+}
+
 export function loadWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   const databaseUrl = present(env.DATABASE_APP_URL);
   if (!databaseUrl) throw new Error('DATABASE_APP_URL is not set');
@@ -118,6 +141,7 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
         ? DEFAULT_PREFETCH
         : readInteger('NOTIFICATION_PREFETCH', prefetch, 1, 100),
     retryDelaysMs: readRetryDelays(present(env.NOTIFICATION_RETRY_DELAYS_MS)),
+    qrisSimulatorUrl: readQrisSimulatorUrl(env),
     host: present(env.NOTIFICATION_WORKER_HOST) ?? DEFAULT_HOST,
     port:
       port === undefined ? DEFAULT_PORT : readInteger('NOTIFICATION_WORKER_PORT', port, 1, 65535),

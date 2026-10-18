@@ -16,7 +16,9 @@ import { NoopEventPublisher, type EventPublisher } from './events/publisher.js';
 import { authenticateInternal } from './internal/plugin.js';
 import { internalBookingRoutes } from './booking/internal-routes.js';
 import { internalRoutes } from './internal/routes.js';
+import { internalWaRoutes } from './internal/wa-routes.js';
 import { locationsRoutes } from './locations/routes.js';
+import { serializeRequest } from './log-redaction.js';
 import { paymentRoutes } from './payments/routes.js';
 import { queueRoutes } from './queue/routes.js';
 import { tenantsRoutes } from './tenants/routes.js';
@@ -35,11 +37,19 @@ export interface AppOptions {
   /** Defaults to a no-op publisher; server.ts passes the RabbitMQ publisher. */
   events?: EventPublisher;
   now?: () => Date;
-  logger?: boolean;
+  /** true = JSON logs to stdout; a stream receives the lines instead (tests). */
+  logger?: boolean | { stream: { write(line: string): void }; level?: string };
 }
 
 export function buildApp(options: AppOptions) {
-  const app = Fastify({ logger: options.logger ?? false });
+  const logger = options.logger ?? false;
+  const app = Fastify({
+    // Phone numbers in /internal/v1 query strings are masked in the request log (S09).
+    logger:
+      logger === false
+        ? false
+        : { ...(logger === true ? {} : logger), serializers: { req: serializeRequest } },
+  });
   const now = options.now ?? (() => new Date());
 
   const deps: AppDeps = {
@@ -87,6 +97,7 @@ export function buildApp(options: AppOptions) {
       scope.addHook('onRequest', authenticateInternal(deps));
       await scope.register(internalRoutes, { deps });
       await scope.register(internalBookingRoutes, { deps });
+      await scope.register(internalWaRoutes, { deps });
     },
     { prefix: '/internal/v1' },
   );

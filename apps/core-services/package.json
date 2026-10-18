@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./testing": "./test/embedded.ts"
+  },
   "scripts": {
     "build": "vite build --ssr src/server.ts --outDir dist --emptyOutDir",
     "dev": "pnpm build && node --env-file=../../.env.example --env-file-if-exists=../../.env dist/server.js",
