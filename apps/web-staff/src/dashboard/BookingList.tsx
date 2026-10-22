@@ -33,8 +33,10 @@ export function BookingList({
           <span className="ticket-name">
             {booking.customer_name} <span className="muted">({booking.service_name})</span>
           </span>
-          <span className="badge">{BOOKING_STATUS_LABELS[booking.status]}</span>
-          <span className="muted">{booking.resource_name}</span>
+          <span className={`badge badge-status badge-${booking.status.toLowerCase()}`}>
+            {BOOKING_STATUS_LABELS[booking.status]}
+          </span>
+          <span className="muted ticket-resource">{booking.resource_name}</span>
           <span className="ticket-actions">
             {bookingActionsFor(booking.status, role).map((action) => (
               <button

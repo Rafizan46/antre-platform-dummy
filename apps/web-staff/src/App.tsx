@@ -8,10 +8,14 @@ import { LoginPage } from './pages/LoginPage';
 
 // Bigger pages are split from the initial bundle.
 const DashboardPage = lazy(() =>
-  import('./dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+  import('./dashboard/DashboardPage').then((m) => ({
+    default: m.DashboardPage,
+  })),
 );
 const SettingsPage = lazy(() =>
-  import('./settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+  import('./settings/SettingsPage').then((m) => ({
+    default: m.SettingsPage,
+  })),
 );
 const RegisterPage = lazy(() =>
   import('./pages/RegisterPage').then((m) => ({ default: m.RegisterPage })),
@@ -29,9 +33,30 @@ function Shell() {
 
   if (session === null) {
     return (
-      <Suspense fallback={<Loading />}>
-        {route.name === 'register' ? <RegisterPage /> : <LoginPage />}
-      </Suspense>
+      <div className="auth-layout">
+        <header className="topbar auth-topbar">
+          <strong className="brand">
+            <span className="brand-dot"></span>
+            Antre
+          </strong>
+          <div className="topbar-right">
+            {route.name === 'register' ? (
+              <span className="auth-topbar-link">
+                Sudah punya akun? <a href="#/login">Masuk</a>
+              </span>
+            ) : (
+              <span className="auth-topbar-link">
+                Belum punya akun bisnis? <a href="#/daftar">Daftarkan bisnis Anda</a>
+              </span>
+            )}
+          </div>
+        </header>
+        <div className="auth-container">
+          <Suspense fallback={<Loading />}>
+            {route.name === 'register' ? <RegisterPage /> : <LoginPage />}
+          </Suspense>
+        </div>
+      </div>
     );
   }
 
@@ -42,23 +67,33 @@ function Shell() {
         Lompat ke konten
       </a>
       <header className="topbar">
-        <strong className="brand">Antre</strong>
-        <nav aria-label="Menu utama">
-          <a href="#/" aria-current={route.name === 'dashboard' ? 'page' : undefined}>
-            Dashboard
-          </a>
-          {role === 'OWNER' ? (
-            <a href="#/pengaturan" aria-current={route.name === 'settings' ? 'page' : undefined}>
-              Pengaturan
+        <div className="topbar-left">
+          <strong className="brand">
+            <span className="brand-dot"></span>
+            Antre
+          </strong>
+          <nav aria-label="Menu utama">
+            <a href="#/" aria-current={route.name === 'dashboard' ? 'page' : undefined}>
+              Dashboard
             </a>
-          ) : null}
-        </nav>
-        <span className="muted who">
-          {session.user.email} ({ROLE_LABELS[role]})
-        </span>
-        <button type="button" onClick={logout}>
-          Keluar
-        </button>
+            {role === 'OWNER' ? (
+              <a href="#/pengaturan" aria-current={route.name === 'settings' ? 'page' : undefined}>
+                Pengaturan
+              </a>
+            ) : null}
+          </nav>
+        </div>
+        <div className="topbar-right">
+          <span className="who">
+            <strong className="who-user">{session.user.email}</strong>{' '}
+            <span className={`badge badge-role badge-role-${role.toLowerCase()}`}>
+              {ROLE_LABELS[role]}
+            </span>
+          </span>
+          <button type="button" className="btn-logout" onClick={logout}>
+            Keluar
+          </button>
+        </div>
       </header>
       <main id="main" tabIndex={-1} className="page">
         <Suspense fallback={<Loading />}>
