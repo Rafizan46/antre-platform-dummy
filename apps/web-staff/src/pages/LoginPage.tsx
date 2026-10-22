@@ -29,8 +29,10 @@ export function LoginPage() {
 
   return (
     <main className="auth-page">
-      <form className="card stack" onSubmit={(event) => void submit(event)} noValidate>
-        <h1>Masuk ke Antre</h1>
+      <form className="card auth-card stack" onSubmit={(event) => void submit(event)} noValidate>
+        <div className="auth-header">
+          <h1>Masuk ke Antre</h1>
+        </div>
         {notice !== null ? <InfoNotice>{notice}</InfoNotice> : null}
         <ErrorNotice message={error} />
         <TextField
@@ -51,7 +53,7 @@ export function LoginPage() {
         <button type="submit" className="primary" disabled={busy}>
           {busy ? 'Memproses...' : 'Masuk'}
         </button>
-        <p>
+        <p className="auth-footer">
           Belum punya akun bisnis? <a href="#/daftar">Daftarkan bisnis Anda</a>
         </p>
       </form>
