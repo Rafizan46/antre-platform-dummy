@@ -31,6 +31,13 @@ describe('core-services app', () => {
     expect(response.json()).toEqual({ status: 'ok', service: 'core-services' });
   });
 
+  it('GET /readyz answers 503 while the database is unreachable', async () => {
+    const response = await app.inject({ method: 'GET', url: '/readyz' });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'not_ready', service: 'core-services' });
+  });
+
   it('rejects a protected route without a token', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/v1/users' });
 
@@ -91,5 +98,26 @@ describe('core-services app', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('VALIDATION_ERROR');
+  });
+});
+
+describe('GET /metrics', () => {
+  it('exposes request counters and histograms by route pattern, without raw URLs', async () => {
+    await app.inject({ method: 'GET', url: '/api/v1/users' });
+    await app.inject({ method: 'GET', url: '/no/such/path/user@example.com' });
+
+    const response = await app.inject({ method: 'GET', url: '/metrics' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/plain');
+    expect(response.body).toContain(
+      'antre_http_requests_total{method="GET",route="/api/v1/users",status="401"} ',
+    );
+    expect(response.body).toContain('route="unmatched"');
+    expect(response.body).toContain('antre_http_request_duration_seconds_bucket{');
+    expect(response.body).toContain('le="+Inf"');
+    expect(response.body).toContain('antre_db_pool_connections{pool="app",state="total"}');
+    expect(response.body).not.toContain('user@example.com');
+    expect(response.body).not.toContain('route="/metrics"');
   });
 });

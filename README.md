@@ -323,21 +323,77 @@ Pemicu: pod HPA `Pending` lebih dari 5 menit karena CPU/memori kurang. (1) Buat 
 
 ### Keterbatasan
 
-- HPA hanya memakai CPU. Kriteria req/dtk per pod (> 50) memerlukan Prometheus + Prometheus Adapter, dan kriteria panjang antrean `notifications.wa` (> 100 per pod) memerlukan KEDA atau adapter metrik eksternal; keduanya belum dipasang.
+- HPA hanya memakai CPU. Kriteria req/dtk per pod (> 50) memerlukan Prometheus (S14 menyediakan metrik `antre_http_requests_total`, dan manifest memberi anotasi scrape) + Prometheus Adapter, dan kriteria panjang antrean `notifications.wa` (> 100 per pod) memerlukan KEDA atau adapter metrik eksternal; keduanya belum dipasang.
 - Forward-auth JWT dan rate limit per tenant di gateway belum ada: JWT diverifikasi oleh service sendiri, rate limit gateway hanya per IP dan per replika Traefik.
 - Limiter login di core melihat IP Traefik (core belum memakai `trustProxy`), jadi kuncinya efektif per email.
 - NetworkPolicy hanya ingress; egress ke layanan terkelola tidak dibatasi karena CIDR-nya bergantung penyedia.
 - Belum diuji pada k3s sungguhan; CSP web belum diuji di browser sungguhan.
 - `infra/k8s/overlays/dev/db-roles.sql` adalah salinan `infra/docker/db-roles.sql` (CI memeriksa keduanya sama).
 
+## Observability (S14)
+
+Overlay `docker-compose.observability.yml` menambahkan Prometheus, Grafana, dan `redis_exporter` di atas stack prod-like. Port hanya di `127.0.0.1` (Grafana 13000, Prometheus 19090; ubah lewat `GRAFANA_PORT`/`PROMETHEUS_PORT`), dan tidak ada route Traefik ke sana.
+
+```bash
+# .env.prod: isi juga GRAFANA_ADMIN_PASSWORD (lihat .env.prod.example)
+docker compose --env-file .env.prod -f docker-compose.prod.yml -f docker-compose.observability.yml up -d --build --wait
+# Grafana http://127.0.0.1:13000 (admin / GRAFANA_ADMIN_PASSWORD), dashboard "Antre - Overview" (uid antre-overview) jadi halaman awal
+# Prometheus http://127.0.0.1:19090/targets (8 target: 4 service, traefik, rabbitmq, rabbitmq-queues, redis)
+```
+
+- Target scrape (`infra/observability/prometheus.yml`): `core-services:3000`, `notification-worker:3100`, `wa-channel:3200`, `realtime-gateway:3300` (semuanya `/metrics`), Traefik (`gateway:8082`, entry point internal `traefik`, label per service), RabbitMQ (plugin `rabbitmq_prometheus` bawaan image, port 15692, termasuk `/metrics/detailed` untuk kedalaman antrean per queue), dan `redis-exporter`.
+- `core-services` kini punya `/metrics` buatan sendiri (tanpa library klien): `antre_http_requests_total{method,route,status}`, histogram `antre_http_request_duration_seconds{method,route,status_class}` (bucket 5 ms sampai 5 dtk, ada bucket 0,2), `antre_events_published_total{event_type}` (tiket dibuat/dipanggil, reservasi, `billing.quota.warning/exceeded`), dan `antre_db_pool_connections{pool,state}`. Label `route` adalah pola rute (`/api/v1/queues/tickets/:id/actions`, rute tak dikenal menjadi `unmatched`), tanpa tenant atau pengguna sebagai label, dan jumlah deret dibatasi 500. `/metrics` tidak dirutekan Traefik (404 di gateway, dicek `smoke-prod.sh`); di k3s NetworkPolicy `allow-prometheus-scrape` hanya mengizinkan namespace `monitoring`.
+- Alert (`infra/observability/alerts.yml`, 7 aturan): `ServiceDown`, `HighErrorRate` (5xx > 1% selama 5 menit), `HighLatencyP95` dan `GatewayHighLatencyP95` (> 200 ms), `NotificationDeadLetterQueueNotEmpty` (DLQ bertambah atau berisi), `RealtimeRedisNotReady`, `DbPoolSaturated`. Alertmanager belum dipasang: aturan hanya dievaluasi dan terlihat di Prometheus/Grafana.
+- Dashboard (`infra/observability/grafana/dashboards/antre-overview.json`, 23 panel): laju request, p95, dan error per route/service; tiket dibuat/dipanggil/selesai, reservasi, peringatan kuota; notifikasi terkirim/retry/DLQ, webhook WA, balasan tanpa tenant; koneksi SSE, RabbitMQ (`notifications.wa`), Redis, pool DB; status target. Datasource dan dashboard diprovisi dari berkas (read-only di UI).
+- Validasi: `docker run --rm -v "$PWD/infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro" -v "$PWD/infra/observability/alerts.yml:/etc/prometheus/rules/alerts.yml:ro" --entrypoint promtool prom/prometheus:v3.15.1 check config /etc/prometheus/prometheus.yml` (job CI `observability` menjalankannya; di Git Bash tambahkan `MSYS_NO_PATHCONV=1`).
+- k3s: Deployment `core-services`, `notification-worker`, `wa-channel`, dan `realtime-gateway` memakai anotasi `prometheus.io/scrape|port|path`. ServiceMonitor tidak disertakan; pasang Prometheus di namespace `monitoring` (mis. kube-prometheus-stack) dengan scrape berbasis anotasi. Itu juga prasyarat HPA berbasis req/dtk (Prometheus Adapter).
+- Image dipin tag+digest: `prom/prometheus:v3.15.1`, `grafana/grafana:13.0.11`, `oliver006/redis_exporter:v1.94.0`.
+
+## Uji beban (k6, S14)
+
+Skrip di `load/` (`antre.js`, `lib.js`, `run.sh`); k6 berjalan lewat image `grafana/k6:2.3.0` (tanpa instalasi lokal) di jaringan `edge` stack compose agar bisa mencapai gateway (`/api/v1/*`) dan `core-services` langsung (`/internal/v1`, tidak dirutekan gateway). Setiap run membuat 6 tenant sekali pakai (register, katalog, upgrade ke `PAID_LOCATION` lewat checkout dan callback HMAC agar kuota 100 tiket FREE tidak mengganggu).
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml -f docker-compose.observability.yml up -d --build --wait
+PROFILE=smoke bash load/run.sh .env.prod                 # 30 dtk
+PROFILE=normal bash load/run.sh .env.prod                # quiet | normal | peak
+SCENARIOS=holds PROFILE=smoke bash load/run.sh .env.prod # mixed,login,holds,sse,webhook
+# project compose lain: COMPOSE_PROJECT_NAME=antre-s14 bash load/run.sh .env.s14
+# (smoke-prod.sh juga membaca log lewat project compose: ekspor COMPOSE_PROJECT_NAME yang sama)
+```
+
+Skenario: `mixed` (a+b: 40% baca dashboard, 15% buat tiket lewat `/internal/v1` dengan token servis, 45% staf CALL_NEXT lalu SERVE dan COMPLETE; ramp bertahap `ramping-arrival-rate`: quiet 5 lalu 10 req/dtk, normal 30 lalu 50, peak 100 lalu 150), `login` (20 login/menit), `holds` (c: 400 percobaan hold, 20 sekaligus pada slot yang sama dengan 2 resource; slot boleh diterima paling banyak 2 kali, dan teardown memeriksa kalender: nol double booking), `sse` (d: 25 koneksi SSE selama 20 dtk), `webhook` (5 webhook Meta bertanda tangan per dtk). Ambang: p95 < 200 ms untuk request API dan tiap endpoint, hold, dan webhook; login p95 < 500 ms (scrypt sengaja lambat); respons tak terduga < 1%; `antre_double_bookings` = 0.
+
+Hasil nyata pada laptop (Windows 11, Docker Desktop 12 vCPU dan 8 GB dibagi dengan k6, Prometheus, Grafana; satu replika per service, bukan 2 node 2 vCPU), 6 tenant, `kind:api` (semua endpoint API bersama):
+
+| Profil                | Rata-rata req/dtk  | p50     | p95     | p99      | Error | Hold p95 | Login p95 |
+| --------------------- | ------------------ | ------- | ------- | -------- | ----- | -------- | --------- |
+| quiet (5 sampai 10)   | 14,8               | 10,4 ms | 22,9 ms | 35,0 ms  | 0%    | 148 ms   | 274 ms    |
+| normal (30 sampai 50) | 46,3               | 10,3 ms | 21,5 ms | 30,6 ms  | 0%    | 169 ms   | 342 ms    |
+| peak (100 sampai 150) | 134,4 (puncak 150) | 17,3 ms | 62,4 ms | 114,4 ms | 0%    | 144 ms   | 411 ms    |
+
+Run peak lengkap (semua skenario, 19.140 request): 0 dari 19.140 gagal, 2.799 tiket dibuat dan 2.793 dipanggil, 40 hold diterima (20 slot x 2 resource) dan 360 ditolak 409, `antre_double_bookings` 0, webhook p95 6,8 ms, SSE 25 koneksi terbuka 20 dtk. Selama peak: `core-services` sekitar 63% CPU, PostgreSQL sekitar 280% CPU (bottleneck mesin ini), RabbitMQ dan Traefik rendah.
+
+Temuan:
+
+- Satu antrean (satu lokasi dan layanan) diserialkan oleh baris `ticket_counters` (mutex per antrean untuk FIFO, §6.3). Dengan SEMUA beban pada satu lokasi, throughput berhenti di sekitar 80 sampai 105 req/dtk dan p95 melonjak ke 6 sampai 19 dtk (pool DB 10 koneksi penuh, ratusan permintaan menunggu). Beban NFR-LOAD-01 secara nyata tersebar di banyak lokasi; dengan 6 tenant ambangnya lulus pada profil peak. Perbaikan kecil yang dibuat: `reserveQuota` (baris `usage_counters`, titik panas kedua) dipindah ke akhir transaksi pembuatan tiket sehingga kunci ditahan lebih singkat (satu antrean: 82 menjadi 105 req/dtk; tes integrasi core hijau). Batas per antrean bukan perubahan kecil: butuh redesain (mis. sequence di luar transaksi) dan dicatat sebagai keterbatasan.
+- Menambah replika `core-services` (2 replika) tidak menaikkan throughput satu antrean, karena bottleneck ada di database, bukan CPU Node.
+- Hold 20 sekaligus pada slot yang sama: p95 sekitar 150 ms (diserialkan advisory lock slot); lulus tetapi paling dekat ke ambang.
+- Login p95 270 sampai 410 ms oleh scrypt (sengaja); ambangnya dilonggarkan khusus login.
+- `GET /queues/tickets` mengembalikan semua tiket aktif lokasi tanpa paginasi; dengan antrean ribuan tiket (uji awal tanpa SERVE/COMPLETE) payload dan CPU PostgreSQL membesar. Tidak dibatasi di S14 (antrean nyata kecil).
+- Tidak ada indeks atau N+1 yang terbukti jadi penyebab utama; `expireStaleTickets` (UPDATE tiap operasi antrean) memindai tiket aktif per lokasi dan perlu dipantau bila antrean besar.
+
 ## CI
 
-`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan empat job:
+`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan lima job (`check`, `db-integration`, `images`, `manifests`, `observability`); `.github/workflows/smoke.yml` terpisah (manual atau Senin 03:00 UTC):
 
 - `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, test, dan build core-services, notification-worker, wa-channel, realtime-gateway, serta web-staff.
 - `db-integration`: PostgreSQL 16 (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), Redis 8 (port host 36379, sesuai `REDIS_URL` di `.env.example`), dan RabbitMQ 4.3 dengan management (port host 35672 dan 45672, sesuai `RABBITMQ_URL` dan `RABBITMQ_MANAGEMENT_URL`) sebagai service container, lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, `pnpm core:test:integration` (tes API Tenant & Auth, Catalog, Queue, Booking, callback pembayaran, langganan dan konsol Super Admin, publish saat broker mati, endpoint internal WhatsApp), `pnpm notif:test:integration`, `pnpm wa:test:integration`, lalu `pnpm rt:test:integration`.
 - `images`: build semua image (target Dockerfile) dengan cache GitHub Actions, tanpa push.
-- `manifests`: render kustomize base/dev/prod, validasi dengan kubeconform (termasuk CRD Traefik), `docker compose config` untuk berkas dev dan prod, dan cek salinan `db-roles.sql`.
+- `manifests`: render kustomize base/dev/prod, validasi dengan kubeconform (termasuk CRD Traefik), `docker compose config` untuk berkas dev, prod, dan prod + observability, dan cek salinan `db-roles.sql`.
+- `observability`: `promtool check config` (termasuk aturan alert) lewat image `prom/prometheus` dan validasi JSON dashboard Grafana.
+
+`.github/workflows/smoke.yml` (`workflow_dispatch` atau terjadwal) membangun stack prod-like plus overlay observability dengan rahasia acak yang dibuat di runner (tanpa secret repositori), menjalankan `smoke-prod.sh`, memeriksa semua target Prometheus `up`, lalu k6 smoke 30 detik (`mixed,holds,sse`). Sintaks semua workflow dicek dengan `rhysd/actionlint:1.7.12` (`docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12`).
 
 `.github/workflows/release.yml` (tag `v*` atau manual) mendorong image ke GHCR dengan tag `sha-<commit>` dan tag versi; nonaktif sampai variabel repositori `RELEASE_ENABLED=true` diset, dan tanpa secret tambahan (memakai `GITHUB_TOKEN`).
 

@@ -201,6 +201,23 @@ jobs:
         run: |
           docker compose -f docker-compose.dev.yml config --quiet
           docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+          docker compose --env-file .env.prod.example -f docker-compose.prod.yml -f docker-compose.observability.yml config --quiet
 
       - name: Check that the dev-roles copy is in sync
         run: diff infra/docker/db-roles.sql infra/k8s/overlays/dev/db-roles.sql
+
+  observability:
+    name: Validate Prometheus configuration, rules, and Grafana dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: promtool check config and rules
+        run: |
+          docker run --rm             -v "$PWD/infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"             -v "$PWD/infra/observability/alerts.yml:/etc/prometheus/rules/alerts.yml:ro"             --entrypoint promtool prom/prometheus:v3.15.1 check config /etc/prometheus/prometheus.yml
+
+      - name: Grafana dashboard is valid JSON with a uid
+        run: |
+          node -e 'const d=JSON.parse(require("fs").readFileSync("infra/observability/grafana/dashboards/antre-overview.json","utf8")); if(!d.uid||!d.panels.length) process.exit(1); console.log(d.title+": "+d.panels.length+" panels")'

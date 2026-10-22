@@ -11,13 +11,18 @@ log:
 
 accessLog:
   format: json
-  # Query strings can carry phone numbers and access tokens (EventSource cannot set headers).
+  # Query strings carry phone numbers and JWTs (EventSource and the kiosk cannot set headers:
+  # /stream?access_token=..., /kiosk.html?token=...). Traefik puts the query into RequestPath and
+  # RequestLine, and has no path-without-query field, so both are dropped; the router and service
+  # names still say which route was hit.
   fields:
     defaultMode: keep
     headers:
       defaultMode: drop
     names:
       QueryString: drop
+      RequestPath: drop
+      RequestLine: drop
 
 entryPoints:
   # Plain HTTP for local use. In production terminate TLS at the edge/websecure only and drop this
@@ -57,3 +62,13 @@ providers:
 api:
   dashboard: false
   insecure: false
+
+# Prometheus metrics on the internal `traefik` entry point (:8082, never published to the host);
+# scraped by the observability overlay (docker-compose.observability.yml). Service labels only.
+metrics:
+  prometheus:
+    entryPoint: traefik
+    addEntryPointsLabels: false
+    addRoutersLabels: false
+    addServicesLabels: true
+    buckets: [0.01, 0.025, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2.5, 5]

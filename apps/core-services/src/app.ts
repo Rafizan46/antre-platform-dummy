@@ -20,6 +20,7 @@ import { authenticateInternal } from './internal/plugin.js';
 import { internalBookingRoutes } from './booking/internal-routes.js';
 import { internalRoutes } from './internal/routes.js';
 import { internalWaRoutes } from './internal/wa-routes.js';
+import { CoreMetrics } from './metrics.js';
 import { locationsRoutes } from './locations/routes.js';
 import { serializeRequest } from './log-redaction.js';
 import { paymentRoutes } from './payments/routes.js';
@@ -59,6 +60,10 @@ export function buildApp(options: AppOptions) {
         : { ...(logger === true ? {} : logger), serializers: { req: serializeRequest } },
   });
   const now = options.now ?? (() => new Date());
+  const metrics = new CoreMetrics();
+  metrics.addPool('app', options.pool);
+  if (options.platformAdminPool) metrics.addPool('platform_admin', options.platformAdminPool);
+  const basePublisher = options.events ?? new NoopEventPublisher();
 
   const deps: AppDeps = {
     pool: options.pool,
@@ -67,7 +72,12 @@ export function buildApp(options: AppOptions) {
     // Created now (not on first use) so the first unknown-email login is not faster than later ones.
     verifyDummyPassword: createDummyVerifier(),
     now,
-    events: options.events ?? new NoopEventPublisher(),
+    events: {
+      publish: async (event) => {
+        metrics.observeEvent(event.event_type);
+        await basePublisher.publish(event);
+      },
+    },
     waChannelToken: options.waChannelToken,
     slotLock: options.slotLock,
     paymentCallbackSecret: options.paymentCallbackSecret,
@@ -82,6 +92,35 @@ export function buildApp(options: AppOptions) {
   app.decorateRequest('internalTenantId', null);
 
   app.get('/healthz', async () => ({ status: 'ok', service: 'core-services' }));
+
+  // Readiness: 503 while the database is unreachable (never routed through the gateway).
+  app.get('/readyz', async (_request, reply) => {
+    try {
+      let timer: NodeJS.Timeout | undefined;
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('database ping timed out')), 2000);
+      });
+      try {
+        await Promise.race([options.pool.query('SELECT 1'), timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
+      return { status: 'ready', service: 'core-services' };
+    } catch {
+      return reply.status(503).send({ status: 'not_ready', service: 'core-services' });
+    }
+  });
+
+  // Prometheus scrape target on the internal network only: the gateway has no route for it.
+  app.get('/metrics', async (_request, reply) =>
+    reply.type('text/plain; version=0.0.4').send(metrics.render()),
+  );
+  app.addHook('onResponse', async (request, reply) => {
+    // routeOptions.url is the route pattern; unmatched requests collapse into one label.
+    const route = request.routeOptions.url ?? 'unmatched';
+    if (route === '/metrics') return;
+    metrics.observeRequest(request.method, route, reply.statusCode, reply.elapsedTime / 1000);
+  });
 
   // Public routes.
   app.register(authRoutes, { prefix: '/api/v1/auth', deps });

@@ -1,0 +1,66 @@
+name: Stack smoke
+
+# Builds the prod-like stack on the runner, runs the gateway smoke test and a 30 second k6 smoke
+# (spec 9.3). Manual or weekly; it is not part of the pull request checks. Every secret is generated
+# on the runner, none is read from the repository settings.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  stack-smoke:
+    name: Prod-like stack, gateway smoke, k6 smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: antre-ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Generate a throwaway environment file
+        run: |
+          set -euo pipefail
+          while IFS= read -r line; do
+            case "$line" in
+              *=CHANGE_ME) printf '%s=%s\n' "${line%%=*}" "$(openssl rand -hex 24)" ;;
+              *) printf '%s\n' "$line" ;;
+            esac
+          done < .env.prod.example > .env.ci
+
+      - name: Start the stack with the observability overlay
+        run: >-
+          docker compose --env-file .env.ci
+          -f docker-compose.prod.yml -f docker-compose.observability.yml
+          up -d --build --wait --wait-timeout 300
+
+      - name: Gateway smoke test
+        run: bash infra/docker/smoke-prod.sh .env.ci
+
+      - name: Prometheus targets are up
+        run: |
+          set -euo pipefail
+          sleep 20
+          curl -fsS http://127.0.0.1:19090/api/v1/targets \
+            | node -e 'const t=JSON.parse(require("fs").readFileSync(0)).data.activeTargets; const bad=t.filter(x=>x.health!=="up"); console.log(t.length+" targets, "+bad.length+" not up"); if(bad.length){console.log(bad.map(x=>x.labels.job+": "+x.lastError).join("\n")); process.exit(1)}'
+
+      - name: k6 smoke (30 seconds, queue, booking, SSE)
+        env:
+          PROFILE: smoke
+          SCENARIOS: mixed,holds,sse
+        run: bash load/run.sh .env.ci
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose --env-file .env.ci -f docker-compose.prod.yml -f docker-compose.observability.yml logs --no-color --tail 80
+
+      - name: Tear down
+        if: always()
+        run: >-
+          docker compose --env-file .env.ci
+          -f docker-compose.prod.yml -f docker-compose.observability.yml
+          down -v

@@ -83,6 +83,17 @@ for path in / /kiosk.html; do
 done
 contains "CSP header on the web app" "Content-Security-Policy" "$(curl -sI "$BASE/")"
 
+echo "== access log hygiene"
+# The SSE request above sent a JWT as access_token; the kiosk page takes one as token. Neither may
+# end up in the gateway access log (Traefik writes the query into RequestPath and RequestLine).
+status "$BASE/kiosk.html?token=$TOKEN" >/dev/null
+sleep 2
+GATEWAY_LOG=$(docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml logs --no-log-prefix gateway 2>&1)
+contains "gateway access log is being written" '"RouterName"' "$GATEWAY_LOG"
+for needle in 'eyJ' 'access_token=' 'token=' "$PHONE"; do
+  if [[ "$GATEWAY_LOG" == *"$needle"* ]]; then echo "FAIL  gateway log contains $needle"; FAILED=1; else echo "PASS  gateway log has no $needle"; fi
+done
+
 echo "== rate limit (login)"
 CODES=""
 for i in $(seq 1 25); do
