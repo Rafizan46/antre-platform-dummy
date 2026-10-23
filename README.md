@@ -95,8 +95,10 @@ pnpm screenshots --start             # atau nyalakan stack terisolasi sendiri, l
 | `--url`, `--api`, `--wa` | Web staf (bawaan `http://127.0.0.1:5173`), API core (`:3000`), WA Channel (dari `.run/state.json` atau `:3200`)                                                                 |
 | `--start`                | Stack terisolasi: project compose `antre-shots`, port 57000+ (`--base-port`), `.run/screenshots-stack`; dimatikan dan volumenya dihapus di akhir; stack dev Anda tidak disentuh |
 | `--no-build`             | Dengan `--start`: lewati build service                                                                                                                                          |
-| `--out <dir>`            | Folder keluaran (bawaan `.run/screenshots/<timestamp>/`, juga disalin ke `.run/screenshots/latest/`)                                                                            |
+| `--out <dir>`            | Folder keluaran (bawaan `.run/screenshots/<timestamp>/`; set terbaru juga ada di `.run/screenshots/latest/`, lihat di bawah)                                                    |
 | `--only login,kiosk`     | Hanya layar tertentu (`--list` menampilkan nama); `--width W --height H` memakai satu ukuran untuk semua layar                                                                  |
+
+`latest/` selalu lengkap: run penuh tanpa kegagalan menggantikan seluruh isinya; run parsial (`--only`, `--width/--height`) atau run dengan kegagalan menggabung per nama berkas (hanya berkas yang dibuat ulang yang menimpa, sisanya dipertahankan). `latest/index.md` dan `manifest.json` mencatat waktu pembuatan dan run asal tiap berkas; folder bertimestamp hanya berisi hasil run itu.
 
 Hasil: PNG bernomor (`08-dashboard-dilayani-phone.png`) dan `index.md` (berkas, viewport, URL, ukuran, peringatan, galat konsol); folder `.run/` tidak di-commit. Tanpa `--start`, skrip hanya membaca dan mengisi data demo (idempoten: tenant `klinik-demo` dan `klinik-kosong`, tiket baru lewat webhook WA, token kiosk baru) dan tidak mematikan apa pun.
 

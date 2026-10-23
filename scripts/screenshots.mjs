@@ -1,6 +1,6 @@
 // pnpm screenshots: tangkapan layar PNG seluruh UI Antre lewat Chrome/Edge headless (CDP).
 // Lihat `pnpm screenshots --help`. Hasil: .run/screenshots/<timestamp>/ (+ index.md) dan .../latest/.
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { findBrowser, launchBrowser } from './lib/browser.mjs';
@@ -14,6 +14,7 @@ import {
   shotName,
   timestamp,
 } from './lib/screenshot-args.mjs';
+import { updateLatest } from './lib/screenshot-latest.mjs';
 import { createPage } from './lib/screenshot-page.mjs';
 import { STEPS, STEP_KEYS, selectSteps } from './lib/screenshot-steps.mjs';
 import { startStack } from './lib/screenshot-stack.mjs';
@@ -212,8 +213,24 @@ async function main() {
 
   if (args.out === null) {
     const latest = path.join(ROOT, '.run', 'screenshots', 'latest');
-    rmSync(latest, { recursive: true, force: true });
-    cpSync(outDir, latest, { recursive: true });
+    const update = updateLatest({
+      outDir,
+      latestDir: latest,
+      full: args.only === null && args.size === null,
+      runName: path.basename(outDir),
+      createdAt: new Date().toISOString(),
+      entries: results.map((r) => ({
+        file: r.file,
+        ok: r.ok,
+        title: r.step.title,
+        viewport: `${r.profile.width}x${r.profile.height} (${r.profile.name})`,
+        size: r.ok ? `${r.width}x${r.height}, ${(r.bytes / 1024).toFixed(0)} KB` : undefined,
+        mode: r.step.mode === 'full' ? 'halaman penuh' : 'viewport',
+      })),
+    });
+    log(
+      `latest ${update.mode === 'replace' ? 'diganti penuh' : 'digabung'}: ${update.files.length} berkas`,
+    );
   }
 
   const failed = results.filter((r) => !r.ok);
