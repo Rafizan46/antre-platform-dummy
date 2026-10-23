@@ -145,6 +145,69 @@ jobs:
       - name: Realtime gateway integration tests (core services + PostgreSQL + Redis)
         run: pnpm rt:test:integration
 
+  e2e:
+    name: End-to-end customer journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    services:
+      # Same images, credentials, and host ports as the db-integration job (defaults of .env.example).
+      # The E2E harness uses its own database (antre_e2e), vhost (antre_e2e), and Redis database 11.
+      postgres:
+        image: postgres:16.15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_dev
+          POSTGRES_DB: antre
+        ports:
+          - 35432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d antre"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:8.10.2-alpine
+        ports:
+          - 36379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:4.3.6-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: antre
+          RABBITMQ_DEFAULT_PASS: rabbitmq_dev
+        ports:
+          - 35672:5672
+          - 45672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable pnpm (Corepack, version from packageManager)
+        run: corepack enable pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: End-to-end journeys (builds the four services, starts them from dist, runs the journeys)
+        run: pnpm e2e
+
   images:
     name: Build Docker images (no push)
     runs-on: ubuntu-latest
@@ -201,6 +264,23 @@ jobs:
         run: |
           docker compose -f docker-compose.dev.yml config --quiet
           docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+          docker compose --env-file .env.prod.example -f docker-compose.prod.yml -f docker-compose.observability.yml config --quiet
 
       - name: Check that the dev-roles copy is in sync
         run: diff infra/docker/db-roles.sql infra/k8s/overlays/dev/db-roles.sql
+
+  observability:
+    name: Validate Prometheus configuration, rules, and Grafana dashboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: promtool check config and rules
+        run: |
+          docker run --rm             -v "$PWD/infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"             -v "$PWD/infra/observability/alerts.yml:/etc/prometheus/rules/alerts.yml:ro"             --entrypoint promtool prom/prometheus:v3.15.1 check config /etc/prometheus/prometheus.yml
+
+      - name: Grafana dashboard is valid JSON with a uid
+        run: |
+          node -e 'const d=JSON.parse(require("fs").readFileSync("infra/observability/grafana/dashboards/antre-overview.json","utf8")); if(!d.uid||!d.panels.length) process.exit(1); console.log(d.title+": "+d.panels.length+" panels")'

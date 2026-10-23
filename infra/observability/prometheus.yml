@@ -1,0 +1,40 @@
+# Prometheus configuration of the observability overlay (docker-compose.observability.yml).
+# Spec section 9.2. Targets are the compose service names on the internal networks. In k3s use the
+# prometheus.io/* annotations on the Deployments (infra/k8s/README.md) or your own scrape config.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: core-services
+    static_configs:
+      - targets: ['core-services:3000']
+  - job_name: notification-worker
+    static_configs:
+      - targets: ['notification-worker:3100']
+  - job_name: wa-channel
+    static_configs:
+      - targets: ['wa-channel:3200']
+  - job_name: realtime-gateway
+    static_configs:
+      - targets: ['realtime-gateway:3300']
+  - job_name: traefik
+    static_configs:
+      - targets: ['gateway:8082']
+  # RabbitMQ ships the rabbitmq_prometheus plugin enabled (port 15692).
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ['rabbitmq:15692']
+  - job_name: redis
+    static_configs:
+      - targets: ['redis-exporter:9121']
+  # Per-queue depth (DLQ panels and alert); the default endpoint only has cluster aggregates.
+  - job_name: rabbitmq-queues
+    metrics_path: /metrics/detailed
+    params:
+      family: [queue_coarse_metrics]
+    static_configs:
+      - targets: ['rabbitmq:15692']

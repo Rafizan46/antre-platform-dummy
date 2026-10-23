@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { CheckField, Empty, ErrorNotice, Loading, TextField } from '../components/ui';
 import { useAction, useResource } from '../lib/hooks';
 
-function ResourceForm({
+export function ResourceForm({
   initial,
   services,
   busy,
@@ -30,6 +30,8 @@ function ResourceForm({
   const [active, setActive] = useState(initial.active);
   const [serviceIds, setServiceIds] = useState(initial.serviceIds);
   const [problem, setProblem] = useState<string | null>(null);
+  // Only active services can be newly chosen; links to inactive ones are kept as they are.
+  const choices = services.filter((service) => service.is_active);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -62,8 +64,8 @@ function ResourceForm({
       />
       <fieldset>
         <legend>Layanan yang dilayani</legend>
-        {services.length === 0 ? <span className="muted">Belum ada layanan.</span> : null}
-        {services.map((service) => (
+        {choices.length === 0 ? <span className="muted">Belum ada layanan aktif.</span> : null}
+        {choices.map((service) => (
           <CheckField
             key={service.id}
             label={service.name}

@@ -1,0 +1,63 @@
+# Basic alert rules (spec section 9.2). Thresholds follow NFR-PERF-01 (p95 < 200 ms) and
+# NFR-AVAIL-01. Prometheus only evaluates them; routing to Alertmanager is out of scope for S14.
+groups:
+  - name: antre
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: 'Target {{ $labels.job }} ({{ $labels.instance }}) is down'
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(antre_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(antre_http_requests_total[5m])), 1e-9) > 0.01
+          and sum(rate(antre_http_requests_total[5m])) > 0.2
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: 'core-services 5xx ratio above 1% for 5 minutes'
+
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(antre_http_request_duration_seconds_bucket[5m]))) > 0.2
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: 'core-services p95 latency above 200 ms (NFR-PERF-01)'
+
+      - alert: GatewayHighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, service) (rate(traefik_service_request_duration_seconds_bucket{service!~"realtime-gateway.*"}[5m]))) > 0.2
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Gateway p95 latency above 200 ms for {{ $labels.service }}'
+
+      - alert: NotificationDeadLetterQueueNotEmpty
+        expr: |
+          increase(antre_notifications_dead_lettered_total[15m]) > 0
+          or increase(antre_wa_inbound_dead_lettered_total[15m]) > 0
+          or rabbitmq_detailed_queue_messages_ready{queue="notifications.dlq"} > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Messages reached a dead-letter queue (notifications.dlq or wa.inbound DLQ)'
+
+      - alert: RealtimeRedisNotReady
+        expr: antre_rt_redis_ready == 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: 'realtime-gateway has no Redis connection (SSE updates are not flowing)'
+
+      - alert: DbPoolSaturated
+        expr: antre_db_pool_connections{state="waiting"} > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Requests are waiting for a PostgreSQL pool connection ({{ $labels.pool }})'

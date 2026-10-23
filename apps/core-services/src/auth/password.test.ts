@@ -59,3 +59,16 @@ describe('password hashing', () => {
     expect(await verify('anything')).toBe(false);
   });
 });
+
+describe('scripts/lib/hash.mjs (demo:superadmin)', () => {
+  it('writes hashes that verifyPassword accepts', async () => {
+    // Dynamic import by URL: the root script is plain ESM JavaScript outside this package.
+    const url = new URL('../../../../scripts/lib/hash.mjs', import.meta.url).href;
+    const script = (await import(/* @vite-ignore */ url)) as {
+      hashPassword(password: string): Promise<string>;
+    };
+    const hash = await script.hashPassword('Demo-Super-123');
+    expect(await verifyPassword('Demo-Super-123', hash)).toBe(true);
+    expect(await verifyPassword('salah', hash)).toBe(false);
+  });
+});

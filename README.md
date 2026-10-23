@@ -4,20 +4,21 @@ Monorepo platform SaaS antrean virtual dan reservasi slot multi-tenant untuk UMK
 
 ## Struktur
 
-| Path                                         | Isi                                                                     | Status                                  |
-| -------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------- |
-| `apps/gateway`                               | Catatan API Gateway Traefik (konfigurasi: `infra/traefik`, `infra/k8s`) | aktif                                   |
-| `apps/core-services`                         | Tenant & Auth, Catalog, Queue (Fastify)                                 | aktif                                   |
-| `apps/wa-channel`                            | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)         | aktif                                   |
-| `apps/realtime-gateway`                      | Realtime SSE Gateway (Fastify)                                          | aktif                                   |
-| `apps/notification-worker`                   | Konsumer RabbitMQ pengirim pesan WhatsApp                               | aktif                                   |
-| `apps/web-staff`                             | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite)       | Dashboard staf/owner dan Kiosk TV aktif |
-| `packages/shared-types`                      | `@antre/shared-types`: enum status dan role                             | aktif                                   |
-| `packages/event-contracts`                   | `@antre/event-contracts`: envelope dan katalog event                    | aktif                                   |
-| `packages/messaging`                         | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event         | aktif                                   |
-| `packages/db`                                | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS           | aktif                                   |
-| `infra/docker`, `infra/traefik`, `infra/k8s` | Dockerfile multi-stage, gateway Traefik, manifest k3s (kustomize)       | aktif                                   |
-| `.github/workflows`                          | CI GitHub Actions                                                       | aktif                                   |
+| Path                                         | Isi                                                                          | Status                                  |
+| -------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------- |
+| `apps/gateway`                               | Catatan API Gateway Traefik (konfigurasi: `infra/traefik`, `infra/k8s`)      | aktif                                   |
+| `apps/core-services`                         | Tenant & Auth, Catalog, Queue (Fastify)                                      | aktif                                   |
+| `apps/wa-channel`                            | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)              | aktif                                   |
+| `apps/realtime-gateway`                      | Realtime SSE Gateway (Fastify)                                               | aktif                                   |
+| `apps/notification-worker`                   | Konsumer RabbitMQ pengirim pesan WhatsApp                                    | aktif                                   |
+| `apps/web-staff`                             | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite)            | Dashboard staf/owner dan Kiosk TV aktif |
+| `packages/shared-types`                      | `@antre/shared-types`: enum status dan role                                  | aktif                                   |
+| `packages/event-contracts`                   | `@antre/event-contracts`: envelope dan katalog event                         | aktif                                   |
+| `packages/messaging`                         | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event              | aktif                                   |
+| `packages/db`                                | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS                | aktif                                   |
+| `infra/docker`, `infra/traefik`, `infra/k8s` | Dockerfile multi-stage, gateway Traefik, manifest k3s (kustomize)            | aktif                                   |
+| `e2e`                                        | `@antre/e2e`: tes E2E customer journey (Vitest) terhadap service hasil build | aktif                                   |
+| `.github/workflows`                          | CI GitHub Actions                                                            | aktif                                   |
 
 ## Prasyarat
 
@@ -59,6 +60,26 @@ pnpm 12 belum dipakai karena Corepack 0.31 (bawaan Node.js 22.14) menjalankan pn
 
 pnpm bisa mencetak pesan `Update available!` (mis. `11.28.6 → 12.14.0`) beserta perintah `Invoke-WebRequest ...` untuk memasang versi baru. Abaikan pesan itu dan jangan memasang pnpm standalone: versi pnpm repo ini dikunci di `packageManager` dan dijalankan lewat Corepack.
 
+## Quick start (jalan di laptop)
+
+Prasyarat: Node 22, pnpm (lihat bagian sebelumnya), dan Docker yang sedang menyala.
+
+```sh
+pnpm install
+pnpm dev:all                          # terminal 1: Docker (Postgres, Redis, RabbitMQ), db:setup, build, 4 service, dan web
+pnpm demo:seed                        # terminal 2: isi tenant "Klinik Demo" (idempoten) dan cetak kredensial + tautan kiosk
+pnpm wa 6281234567890 "ANTRE klinik-demo pusat"   # simulasi pelanggan WhatsApp
+pnpm dev:stop                         # hentikan sisa proses (tambah --down untuk mematikan Docker juga)
+```
+
+Setelah `dev:all` siap, buka http://127.0.0.1:5173 dan login dengan kredensial yang dicetak `demo:seed` (owner `owner@klinik-demo.test`). Tekan Ctrl+C di terminal `dev:all` untuk mematikan semua service. Log tiap service ada di `.run/logs/*.log` (folder ini tidak di-commit); `pnpm wa` membaca balasan sandbox dari `.run/logs/worker.log`.
+
+- `pnpm demo:superadmin` membuat akun SUPER_ADMIN demo (`superadmin@antre.test`) lewat role database `antre_migrator` dan mencetak contoh pemakaian `/api/v1/admin`. `pnpm demo:seed --superadmin` menjalankan keduanya. `pnpm admin:tenants` login sebagai SUPER_ADMIN dan menampilkan `/api/v1/admin/tenants` tanpa curl.
+- `pnpm pay <payment_ref> <tenant_id> <target_id> <amount> [--subscription]` mengirim callback pembayaran simulasi ber-HMAC (booking DP, atau langganan dengan `--subscription`).
+- Port bentrok atau stack lain berjalan: atur lewat env sebelum `pnpm dev:all`, mis. `CORE_SERVICES_PORT`, `NOTIFICATION_WORKER_PORT`, `WA_CHANNEL_PORT`, `REALTIME_PORT`, `WEB_PORT` (web, bawaan 5173), `COMPOSE_PROJECT_NAME` (bawaan `antre-dev`), dan `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`, `RABBITMQ_AMQP_HOST_PORT`, `RABBITMQ_MANAGEMENT_HOST_PORT`. URL turunan (database, Redis, RabbitMQ, `CORE_SERVICES_URL`) mengikuti port itu bila tidak diatur eksplisit. Prioritas: env proses, lalu `.env`, lalu `.env.example`. `dev:all --no-build` melewati build; `pnpm demo:seed` dan `pnpm wa` membaca `.run/state.json` sehingga ikut port yang dipakai `dev:all`.
+- Panduan uji manual lengkap: `docs/manual-testing.md`.
+- `pnpm test:scripts` menjalankan tes unit skrip di `scripts/`.
+
 ## Perintah
 
 ```sh
@@ -68,6 +89,8 @@ pnpm -r lint                          # ESLint
 pnpm -r test                          # Vitest
 pnpm format                           # Prettier, menulis perubahan
 pnpm format:check                     # Prettier, cek saja (dipakai CI)
+pnpm test:scripts                     # tes unit skrip dev (scripts/)
+pnpm e2e                              # build 4 service lalu jalankan tes E2E (butuh PostgreSQL, Redis, RabbitMQ)
 pnpm --filter @antre/web-staff dev    # dev server web staff di http://localhost:5173
 pnpm --filter @antre/web-staff build  # build produksi web staff
 ```
@@ -256,9 +279,10 @@ docker build -f infra/docker/Dockerfile --target core-services -t antre/core-ser
 Traefik v3 + semua image di atas + PostgreSQL/Redis/RabbitMQ pada jaringan internal `data` (tanpa akses keluar, tanpa port host). Hanya gateway yang membuka port host: `127.0.0.1:18080` (HTTP) dan `127.0.0.1:18443` (HTTPS dengan sertifikat self-signed bawaan Traefik). Port dev (35432, 36379, 35672, 45672) dan PostgreSQL lokal 5432 tidak dipakai.
 
 ```bash
+# Git Bash / Linux. PowerShell: Copy-Item .env.prod.example .env.prod ; rahasia: -join ((1..32 | % { "{0:x2}" -f (Get-Random -Max 256) }))
 cp .env.prod.example .env.prod          # ganti SEMUA CHANGE_ME; buat rahasia dengan: openssl rand -hex 32
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --wait
-bash infra/docker/smoke-prod.sh         # smoke test lewat gateway (butuh curl, node, openssl)
+bash infra/docker/smoke-prod.sh         # smoke test lewat gateway (butuh bash, curl, node, openssl: jalankan di Git Bash atau WSL)
 docker compose --env-file .env.prod -f docker-compose.prod.yml down -v   # hapus stack beserta volume (project antre-prod)
 ```
 
@@ -323,21 +347,103 @@ Pemicu: pod HPA `Pending` lebih dari 5 menit karena CPU/memori kurang. (1) Buat 
 
 ### Keterbatasan
 
-- HPA hanya memakai CPU. Kriteria req/dtk per pod (> 50) memerlukan Prometheus + Prometheus Adapter, dan kriteria panjang antrean `notifications.wa` (> 100 per pod) memerlukan KEDA atau adapter metrik eksternal; keduanya belum dipasang.
+- HPA hanya memakai CPU. Kriteria req/dtk per pod (> 50) memerlukan Prometheus (S14 menyediakan metrik `antre_http_requests_total`, dan manifest memberi anotasi scrape) + Prometheus Adapter, dan kriteria panjang antrean `notifications.wa` (> 100 per pod) memerlukan KEDA atau adapter metrik eksternal; keduanya belum dipasang.
 - Forward-auth JWT dan rate limit per tenant di gateway belum ada: JWT diverifikasi oleh service sendiri, rate limit gateway hanya per IP dan per replika Traefik.
 - Limiter login di core melihat IP Traefik (core belum memakai `trustProxy`), jadi kuncinya efektif per email.
 - NetworkPolicy hanya ingress; egress ke layanan terkelola tidak dibatasi karena CIDR-nya bergantung penyedia.
 - Belum diuji pada k3s sungguhan; CSP web belum diuji di browser sungguhan.
 - `infra/k8s/overlays/dev/db-roles.sql` adalah salinan `infra/docker/db-roles.sql` (CI memeriksa keduanya sama).
 
+## Observability (S14)
+
+Overlay `docker-compose.observability.yml` menambahkan Prometheus, Grafana, dan `redis_exporter` di atas stack prod-like. Port hanya di `127.0.0.1` (Grafana 13000, Prometheus 19090; ubah lewat `GRAFANA_PORT`/`PROMETHEUS_PORT`), dan tidak ada route Traefik ke sana.
+
+```bash
+# .env.prod: isi juga GRAFANA_ADMIN_PASSWORD (lihat .env.prod.example)
+docker compose --env-file .env.prod -f docker-compose.prod.yml -f docker-compose.observability.yml up -d --build --wait
+# Grafana http://127.0.0.1:13000 (admin / GRAFANA_ADMIN_PASSWORD), dashboard "Antre - Overview" (uid antre-overview) jadi halaman awal
+# Prometheus http://127.0.0.1:19090/targets (8 target: 4 service, traefik, rabbitmq, rabbitmq-queues, redis)
+```
+
+- Target scrape (`infra/observability/prometheus.yml`): `core-services:3000`, `notification-worker:3100`, `wa-channel:3200`, `realtime-gateway:3300` (semuanya `/metrics`), Traefik (`gateway:8082`, entry point internal `traefik`, label per service), RabbitMQ (plugin `rabbitmq_prometheus` bawaan image, port 15692, termasuk `/metrics/detailed` untuk kedalaman antrean per queue), dan `redis-exporter`.
+- `core-services` kini punya `/metrics` buatan sendiri (tanpa library klien): `antre_http_requests_total{method,route,status}`, histogram `antre_http_request_duration_seconds{method,route,status_class}` (bucket 5 ms sampai 5 dtk, ada bucket 0,2), `antre_events_published_total{event_type}` (tiket dibuat/dipanggil, reservasi, `billing.quota.warning/exceeded`), dan `antre_db_pool_connections{pool,state}`. Label `route` adalah pola rute (`/api/v1/queues/tickets/:id/actions`, rute tak dikenal menjadi `unmatched`), tanpa tenant atau pengguna sebagai label, dan jumlah deret dibatasi 500. `/metrics` tidak dirutekan Traefik (404 di gateway, dicek `smoke-prod.sh`); di k3s NetworkPolicy `allow-prometheus-scrape` hanya mengizinkan namespace `monitoring`.
+- Alert (`infra/observability/alerts.yml`, 7 aturan): `ServiceDown`, `HighErrorRate` (5xx > 1% selama 5 menit), `HighLatencyP95` dan `GatewayHighLatencyP95` (> 200 ms), `NotificationDeadLetterQueueNotEmpty` (DLQ bertambah atau berisi), `RealtimeRedisNotReady`, `DbPoolSaturated`. Alertmanager belum dipasang: aturan hanya dievaluasi dan terlihat di Prometheus/Grafana.
+- Dashboard (`infra/observability/grafana/dashboards/antre-overview.json`, 23 panel): laju request, p95, dan error per route/service; tiket dibuat/dipanggil/selesai, reservasi, peringatan kuota; notifikasi terkirim/retry/DLQ, webhook WA, balasan tanpa tenant; koneksi SSE, RabbitMQ (`notifications.wa`), Redis, pool DB; status target. Datasource dan dashboard diprovisi dari berkas (read-only di UI).
+- Validasi: `docker run --rm -v "$PWD/infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro" -v "$PWD/infra/observability/alerts.yml:/etc/prometheus/rules/alerts.yml:ro" --entrypoint promtool prom/prometheus:v3.15.1 check config /etc/prometheus/prometheus.yml` (job CI `observability` menjalankannya; di Git Bash tambahkan `MSYS_NO_PATHCONV=1`).
+- k3s: Deployment `core-services`, `notification-worker`, `wa-channel`, dan `realtime-gateway` memakai anotasi `prometheus.io/scrape|port|path`. ServiceMonitor tidak disertakan; pasang Prometheus di namespace `monitoring` (mis. kube-prometheus-stack) dengan scrape berbasis anotasi. Itu juga prasyarat HPA berbasis req/dtk (Prometheus Adapter).
+- Image dipin tag+digest: `prom/prometheus:v3.15.1`, `grafana/grafana:13.0.11`, `oliver006/redis_exporter:v1.94.0`.
+
+## Uji beban (k6, S14)
+
+Skrip di `load/` (`antre.js`, `lib.js`, `run.sh`); k6 berjalan lewat image `grafana/k6:2.3.0` (tanpa instalasi lokal) di jaringan `edge` stack compose agar bisa mencapai gateway (`/api/v1/*`) dan `core-services` langsung (`/internal/v1`, tidak dirutekan gateway). Setiap run membuat 6 tenant sekali pakai (register, katalog, upgrade ke `PAID_LOCATION` lewat checkout dan callback HMAC agar kuota 100 tiket FREE tidak mengganggu).
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml -f docker-compose.observability.yml up -d --build --wait
+PROFILE=smoke bash load/run.sh .env.prod                 # 30 dtk
+PROFILE=normal bash load/run.sh .env.prod                # quiet | normal | peak
+SCENARIOS=holds PROFILE=smoke bash load/run.sh .env.prod # mixed,login,holds,sse,webhook
+# project compose lain: COMPOSE_PROJECT_NAME=antre-s14 bash load/run.sh .env.s14
+# (smoke-prod.sh juga membaca log lewat project compose: ekspor COMPOSE_PROJECT_NAME yang sama)
+```
+
+Skenario: `mixed` (a+b: 40% baca dashboard, 15% buat tiket lewat `/internal/v1` dengan token servis, 45% staf CALL_NEXT lalu SERVE dan COMPLETE; ramp bertahap `ramping-arrival-rate`: quiet 5 lalu 10 req/dtk, normal 30 lalu 50, peak 100 lalu 150), `login` (20 login/menit), `holds` (c: 400 percobaan hold, 20 sekaligus pada slot yang sama dengan 2 resource; slot boleh diterima paling banyak 2 kali, dan teardown memeriksa kalender: nol double booking), `sse` (d: 25 koneksi SSE selama 20 dtk), `webhook` (5 webhook Meta bertanda tangan per dtk). Ambang: p95 < 200 ms untuk request API dan tiap endpoint, hold, dan webhook; login p95 < 500 ms (scrypt sengaja lambat); respons tak terduga < 1%; `antre_double_bookings` = 0.
+
+Hasil nyata pada laptop (Windows 11, Docker Desktop 12 vCPU dan 8 GB dibagi dengan k6, Prometheus, Grafana; satu replika per service, bukan 2 node 2 vCPU), 6 tenant, `kind:api` (semua endpoint API bersama):
+
+| Profil                | Rata-rata req/dtk  | p50     | p95     | p99      | Error | Hold p95 | Login p95 |
+| --------------------- | ------------------ | ------- | ------- | -------- | ----- | -------- | --------- |
+| quiet (5 sampai 10)   | 14,8               | 10,4 ms | 22,9 ms | 35,0 ms  | 0%    | 148 ms   | 274 ms    |
+| normal (30 sampai 50) | 46,3               | 10,3 ms | 21,5 ms | 30,6 ms  | 0%    | 169 ms   | 342 ms    |
+| peak (100 sampai 150) | 134,4 (puncak 150) | 17,3 ms | 62,4 ms | 114,4 ms | 0%    | 144 ms   | 411 ms    |
+
+Run peak lengkap (semua skenario, 19.140 request): 0 dari 19.140 gagal, 2.799 tiket dibuat dan 2.793 dipanggil, 40 hold diterima (20 slot x 2 resource) dan 360 ditolak 409, `antre_double_bookings` 0, webhook p95 6,8 ms, SSE 25 koneksi terbuka 20 dtk. Selama peak: `core-services` sekitar 63% CPU, PostgreSQL sekitar 280% CPU (bottleneck mesin ini), RabbitMQ dan Traefik rendah.
+
+Temuan:
+
+- Satu antrean (satu lokasi dan layanan) diserialkan oleh baris `ticket_counters` (mutex per antrean untuk FIFO, §6.3). Dengan SEMUA beban pada satu lokasi, throughput berhenti di sekitar 80 sampai 105 req/dtk dan p95 melonjak ke 6 sampai 19 dtk (pool DB 10 koneksi penuh, ratusan permintaan menunggu). Beban NFR-LOAD-01 secara nyata tersebar di banyak lokasi; dengan 6 tenant ambangnya lulus pada profil peak. Perbaikan kecil yang dibuat: `reserveQuota` (baris `usage_counters`, titik panas kedua) dipindah ke akhir transaksi pembuatan tiket sehingga kunci ditahan lebih singkat (satu antrean: 82 menjadi 105 req/dtk; tes integrasi core hijau). Batas per antrean bukan perubahan kecil: butuh redesain (mis. sequence di luar transaksi) dan dicatat sebagai keterbatasan.
+- Menambah replika `core-services` (2 replika) tidak menaikkan throughput satu antrean, karena bottleneck ada di database, bukan CPU Node.
+- Hold 20 sekaligus pada slot yang sama: p95 sekitar 150 ms (diserialkan advisory lock slot); lulus tetapi paling dekat ke ambang.
+- Login p95 270 sampai 410 ms oleh scrypt (sengaja); ambangnya dilonggarkan khusus login.
+- `GET /queues/tickets` mengembalikan semua tiket aktif lokasi tanpa paginasi; dengan antrean ribuan tiket (uji awal tanpa SERVE/COMPLETE) payload dan CPU PostgreSQL membesar. Tidak dibatasi di S14 (antrean nyata kecil).
+- Tidak ada indeks atau N+1 yang terbukti jadi penyebab utama; `expireStaleTickets` (UPDATE tiap operasi antrean) memindai tiket aktif per lokasi dan perlu dipantau bila antrean besar.
+
+## Uji E2E (S15)
+
+`pnpm e2e` membangun core-services, notification-worker, wa-channel, dan realtime-gateway, lalu menjalankan tes journey pelanggan di `e2e/` (paket privat `@antre/e2e`, Vitest, tanpa dependensi tambahan; HTTP dan SSE memakai `fetch` bawaan Node).
+
+Prasyarat: PostgreSQL, Redis, dan RabbitMQ (dengan management API) yang bisa dijangkau lewat variabel yang sama dengan tes integrasi lain (`DATABASE_ADMIN_URL`, `DATABASE_MIGRATOR_URL`, `DATABASE_APP_URL`, `DATABASE_PLATFORM_ADMIN_URL`, `REDIS_URL`, `RABBITMQ_URL`, `RABBITMQ_MANAGEMENT_URL`; default `.env.example` = stack dev, variabel shell menang). Host harus `127.0.0.1` atau `localhost`.
+
+```sh
+docker compose -f docker-compose.dev.yml up -d --wait   # atau kontainer sementara + variabel env di atas
+pnpm e2e                                                # sekitar 40 detik termasuk build
+E2E_KEEP_LOGS=1 pnpm e2e                                # simpan log service (JSON) di folder temp bila gagal
+```
+
+Harness (`e2e/src/global-setup.ts`): membuat database `antre_e2e` (peran + migrasi) dan vhost RabbitMQ `antre_e2e` yang bersih, mengosongkan Redis database 11 (stack dev memakai 0; tes lain 12 dan 13), lalu men-spawn empat service dari `dist` sebagai proses anak pada port acak dengan rahasia acak (NODE_ENV=test, adapter WA `sandbox`) dan menunggu `/readyz`. Semua dihapus di teardown (Windows dan Linux), jadi aman dijalankan berdampingan dengan stack dev. Balasan WhatsApp dibaca dari log JSON worker (adapter sandbox mencetak tiap pesan; nomor di log disamarkan sehingga tiap pelanggan uji diberi 4 digit akhir unik). Service terhubung ke RabbitMQ lewat proxy TCP milik harness; memutus proxy itu mensimulasikan broker mati tanpa menyentuh RabbitMQ bersama.
+
+| Berkas (`e2e/tests`)    | Journey                                                                                                                                                                                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `01-owner-onboarding`   | register (duplikat 409), login (salah 401), layanan tanpa dan dengan DP (validasi 400), resource, relasi, jam seharian, mode BOTH, staf CALLER/CASHIER (batas role), token kiosk (stream ya, API staf tidak)                                                      |
+| `02-walk-in`            | WA `ANTRE <slug> <kode>` → menu → layanan → tiket; balasan, tiket di API staf, SSE staf dan kiosk `created` tanpa PII; CALL_NEXT (kiosk + pesan dipanggil), RECALL, SERVE, COMPLETE; STATUS dan BATAL tanpa sesi Redis                                            |
+| `03-reservation`        | reservasi layanan ber-DP sampai hold, callback QRIS ber-HMAC (palsu 401, nominal salah membatalkan, duplikat idempoten) → CONFIRMED + pesan; pelanggan lain tidak bisa mengambil slot yang sama (menu dan hold internal 409); batal membebaskan slot              |
+| `04-quota-billing`      | 100 tiket FREE lewat endpoint internal, ke-101 ditolak 402 (staf dan WA sopan, admin diberi tahu), checkout owner, callback langganan ber-HMAC → ACTIVE → tiket lanjut                                                                                            |
+| `05-security-isolation` | tenant kedua tidak melihat atau mengubah data tenant pertama (API dan SSE), JWT palsu 401 (API dan stream), tanda tangan webhook salah 401, callback pembayaran tanpa tanda tangan 401, `/internal` tertutup untuk token pengguna dan tidak ada di service publik |
+| `06-resilience`         | broker diputus: tiket tetap jadi, webhook 503, setelah pulih pesan terkirim dan webhook normal; koneksi PostgreSQL di-terminate 3 kali: core dan worker tidak crash dan pulih (regresi BUG-1)                                                                     |
+
+Tidak diotomatiskan di sini: dashboard dan kiosk di browser (chime/TTS), Super Admin suspend, pengingat booking terjadwal, dan menghentikan RabbitMQ/PostgreSQL sungguhan (lihat `docs/manual-testing.md` dan `docs/checklist-pengujian.md`).
+
 ## CI
 
-`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan empat job:
+`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan enam job (`check`, `db-integration`, `e2e`, `images`, `manifests`, `observability`); `.github/workflows/smoke.yml` terpisah (manual atau Senin 03:00 UTC):
 
 - `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, test, dan build core-services, notification-worker, wa-channel, realtime-gateway, serta web-staff.
 - `db-integration`: PostgreSQL 16 (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), Redis 8 (port host 36379, sesuai `REDIS_URL` di `.env.example`), dan RabbitMQ 4.3 dengan management (port host 35672 dan 45672, sesuai `RABBITMQ_URL` dan `RABBITMQ_MANAGEMENT_URL`) sebagai service container, lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, `pnpm core:test:integration` (tes API Tenant & Auth, Catalog, Queue, Booking, callback pembayaran, langganan dan konsol Super Admin, publish saat broker mati, endpoint internal WhatsApp), `pnpm notif:test:integration`, `pnpm wa:test:integration`, lalu `pnpm rt:test:integration`.
+- `e2e`: service container PostgreSQL/Redis/RabbitMQ seperti `db-integration`, lalu `pnpm e2e` (build empat service dan jalankan semua journey).
 - `images`: build semua image (target Dockerfile) dengan cache GitHub Actions, tanpa push.
-- `manifests`: render kustomize base/dev/prod, validasi dengan kubeconform (termasuk CRD Traefik), `docker compose config` untuk berkas dev dan prod, dan cek salinan `db-roles.sql`.
+- `manifests`: render kustomize base/dev/prod, validasi dengan kubeconform (termasuk CRD Traefik), `docker compose config` untuk berkas dev, prod, dan prod + observability, dan cek salinan `db-roles.sql`.
+- `observability`: `promtool check config` (termasuk aturan alert) lewat image `prom/prometheus` dan validasi JSON dashboard Grafana.
+
+`.github/workflows/smoke.yml` (`workflow_dispatch` atau terjadwal) membangun stack prod-like plus overlay observability dengan rahasia acak yang dibuat di runner (tanpa secret repositori), menjalankan `smoke-prod.sh`, memeriksa semua target Prometheus `up`, lalu k6 smoke 30 detik (`mixed,holds,sse`). Sintaks semua workflow dicek dengan `rhysd/actionlint:1.7.12` (`docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12`).
 
 `.github/workflows/release.yml` (tag `v*` atau manual) mendorong image ke GHCR dengan tag `sha-<commit>` dan tag versi; nonaktif sampai variabel repositori `RELEASE_ENABLED=true` diset, dan tanpa secret tambahan (memakai `GITHUB_TOKEN`).
 

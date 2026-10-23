@@ -591,18 +591,19 @@ describe('jobs', () => {
       );
       expect(rows[0]).toEqual({ status: 'EXPIRED', payment_status: 'UNPAID' });
       expect((await lock.held([key])).size).toBe(0);
-      const expired = app.events.events.filter(
-        (e) =>
-          e.event_type === 'booking.reservation.expired' &&
-          (e.data as { booking_id: string }).booking_id === booking.id,
-      );
-      expect(expired).toHaveLength(1);
+      // Only this booking's events: other tests leave holds made at the fixed clock (2026-10-19)
+      // that the job, which looks at the real clock, expires too.
+      const expiredOf = () =>
+        app.events.events.filter(
+          (e) =>
+            e.event_type === 'booking.reservation.expired' &&
+            (e.data as { booking_id: string }).booking_id === booking.id,
+        );
+      expect(expiredOf()).toHaveLength(1);
 
       // A second run finds nothing for it, and the slot is bookable again.
       await runExpiryJob({ ...jobDeps(realClock.now), events: app.events });
-      expect(
-        app.events.events.filter((e) => e.event_type === 'booking.reservation.expired'),
-      ).toHaveLength(expired.length);
+      expect(expiredOf()).toHaveLength(1);
       const again = await apiRequest(app.app, 'POST', '/internal/v1/bookings/holds', headers, {
         location_id: g.locationId,
         service_id: g.dpServiceId,

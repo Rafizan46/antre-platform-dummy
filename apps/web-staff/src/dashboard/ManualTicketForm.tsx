@@ -70,6 +70,11 @@ export function ManualTicketForm({
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
       />
+      {active.length === 0 ? (
+        <p className="muted">
+          Belum ada layanan aktif. Tambahkan layanan di Pengaturan, tab Layanan.
+        </p>
+      ) : null}
       {problem !== null ? (
         <p className="notice notice-error" role="alert">
           {problem}

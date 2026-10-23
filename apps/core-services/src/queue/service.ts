@@ -284,11 +284,6 @@ export async function createTicket(
     }
   }
 
-  const quota = await reserveQuota(client, env.tenantId, context.id, context.period_month);
-  if (quota === null) {
-    throw new AppError('QUOTA_EXCEEDED', 'Kuota tiket bulanan lokasi ini sudah habis.');
-  }
-
   const seq = await nextSequence(
     client,
     env.tenantId,
@@ -339,6 +334,14 @@ export async function createTicket(
       { now: env.now },
     ),
   ];
+
+  // The quota counter is one hot row per location and month: it is locked as late as possible so
+  // concurrent ticket creations queue behind it for a few statements, not for the whole
+  // transaction (S14 load test). A refusal rolls back the sequence number and the insert.
+  const quota = await reserveQuota(client, env.tenantId, context.id, context.period_month);
+  if (quota === null) {
+    throw new AppError('QUOTA_EXCEEDED', 'Kuota tiket bulanan lokasi ini sudah habis.');
+  }
 
   events.push(
     ...(await quotaThresholdEvents(client, {

@@ -9,6 +9,7 @@ import { startBillingJobs } from './billing/jobs.js';
 import { startBookingJobs } from './booking/jobs.js';
 import { RedisSlotLock } from './booking/slot-lock.js';
 import { loadConfig } from './config.js';
+import { handlePoolErrors } from './db/pool-errors.js';
 import { FanoutEventPublisher } from './events/publisher.js';
 import { RedisRealtime } from './realtime/redis-realtime.js';
 
@@ -19,6 +20,9 @@ async function main(): Promise<void> {
     config.platformAdminDatabaseUrl === null
       ? null
       : new pg.Pool({ connectionString: config.platformAdminDatabaseUrl, max: 2 });
+  handlePoolErrors(pool, 'app', () => app.log);
+  if (platformAdminPool !== null)
+    handlePoolErrors(platformAdminPool, 'platform_admin', () => app.log);
   // The Redis client and the publisher log through the app logger, which exists only after them.
   const events = new RabbitEventPublisher({
     url: config.rabbitmqUrl,

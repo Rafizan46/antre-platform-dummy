@@ -18,6 +18,11 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: realtime-gateway
+      # Honoured by annotation-based Prometheus scrape configs (README, Observability).
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '3300'
+        prometheus.io/path: /metrics
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
