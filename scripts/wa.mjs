@@ -1,4 +1,3 @@
-/* global console, process, setTimeout, fetch */
 // Simulasi pelanggan WhatsApp (dev): kirim webhook ber-signature ke WA Channel,
 // lalu tampilkan balasan sandbox yang muncul di log notification-worker.
 //
@@ -7,9 +6,12 @@
 // Contoh: node scripts/wa.mjs 6281234567890 "ANTRE klinik-uji pusat"
 //
 // Env opsional: WA_CHANNEL_URL (default http://127.0.0.1:3200), WA_APP_SECRET,
-//               WORKER_LOG (default C:/tmp/antre-run/worker.log), WAIT_MS (default 8000)
+//               WORKER_LOG (default .run/logs/worker.log, ditulis oleh pnpm dev:all), WAIT_MS (default 8000)
 import { createHmac, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+
+import { loadEnv } from './lib/env.mjs';
+import { logPath, readState } from './lib/state.mjs';
 
 const [from, text] = process.argv.slice(2);
 if (!from) {
@@ -17,9 +19,12 @@ if (!from) {
   process.exit(1);
 }
 
-const secret = process.env.WA_APP_SECRET ?? 'dev-only-wa-app-secret-not-for-production-01';
-const base = process.env.WA_CHANNEL_URL ?? 'http://127.0.0.1:3200';
-const logFile = process.env.WORKER_LOG ?? 'C:/tmp/antre-run/worker.log';
+const env = loadEnv();
+const state = readState();
+const secret = process.env.WA_APP_SECRET ?? env.WA_APP_SECRET;
+const base =
+  process.env.WA_CHANNEL_URL ?? state?.urls?.waChannel ?? `http://127.0.0.1:${env.WA_CHANNEL_PORT}`;
+const logFile = process.env.WORKER_LOG ?? state?.logs?.worker ?? logPath('worker');
 const waitMs = Number(process.env.WAIT_MS ?? 8000);
 
 function readReplies() {

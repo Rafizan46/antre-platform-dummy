@@ -60,6 +60,26 @@ pnpm 12 belum dipakai karena Corepack 0.31 (bawaan Node.js 22.14) menjalankan pn
 
 pnpm bisa mencetak pesan `Update available!` (mis. `11.28.6 → 12.14.0`) beserta perintah `Invoke-WebRequest ...` untuk memasang versi baru. Abaikan pesan itu dan jangan memasang pnpm standalone: versi pnpm repo ini dikunci di `packageManager` dan dijalankan lewat Corepack.
 
+## Quick start (jalan di laptop)
+
+Prasyarat: Node 22, pnpm (lihat bagian sebelumnya), dan Docker yang sedang menyala.
+
+```sh
+pnpm install
+pnpm dev:all                          # terminal 1: Docker (Postgres, Redis, RabbitMQ), db:setup, build, 4 service, dan web
+pnpm demo:seed                        # terminal 2: isi tenant "Klinik Demo" (idempoten) dan cetak kredensial + tautan kiosk
+pnpm wa 6281234567890 "ANTRE klinik-demo pusat"   # simulasi pelanggan WhatsApp
+pnpm dev:stop                         # hentikan sisa proses (tambah --down untuk mematikan Docker juga)
+```
+
+Setelah `dev:all` siap, buka http://127.0.0.1:5173 dan login dengan kredensial yang dicetak `demo:seed` (owner `owner@klinik-demo.test`). Tekan Ctrl+C di terminal `dev:all` untuk mematikan semua service. Log tiap service ada di `.run/logs/*.log` (folder ini tidak di-commit); `pnpm wa` membaca balasan sandbox dari `.run/logs/worker.log`.
+
+- `pnpm demo:superadmin` membuat akun SUPER_ADMIN demo (`superadmin@antre.test`) lewat role database `antre_migrator` dan mencetak contoh pemakaian `/api/v1/admin`. `pnpm demo:seed --superadmin` menjalankan keduanya. `pnpm admin:tenants` login sebagai SUPER_ADMIN dan menampilkan `/api/v1/admin/tenants` tanpa curl.
+- `pnpm pay <payment_ref> <tenant_id> <target_id> <amount> [--subscription]` mengirim callback pembayaran simulasi ber-HMAC (booking DP, atau langganan dengan `--subscription`).
+- Port bentrok atau stack lain berjalan: atur lewat env sebelum `pnpm dev:all`, mis. `CORE_SERVICES_PORT`, `NOTIFICATION_WORKER_PORT`, `WA_CHANNEL_PORT`, `REALTIME_PORT`, `WEB_PORT` (web, bawaan 5173), `COMPOSE_PROJECT_NAME` (bawaan `antre-dev`), dan `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`, `RABBITMQ_AMQP_HOST_PORT`, `RABBITMQ_MANAGEMENT_HOST_PORT`. URL turunan (database, Redis, RabbitMQ, `CORE_SERVICES_URL`) mengikuti port itu bila tidak diatur eksplisit. Prioritas: env proses, lalu `.env`, lalu `.env.example`. `dev:all --no-build` melewati build; `pnpm demo:seed` dan `pnpm wa` membaca `.run/state.json` sehingga ikut port yang dipakai `dev:all`.
+- Panduan uji manual lengkap: `docs/manual-testing.md`.
+- `pnpm test:scripts` menjalankan tes unit skrip di `scripts/`.
+
 ## Perintah
 
 ```sh
@@ -69,6 +89,7 @@ pnpm -r lint                          # ESLint
 pnpm -r test                          # Vitest
 pnpm format                           # Prettier, menulis perubahan
 pnpm format:check                     # Prettier, cek saja (dipakai CI)
+pnpm test:scripts                     # tes unit skrip dev (scripts/)
 pnpm e2e                              # build 4 service lalu jalankan tes E2E (butuh PostgreSQL, Redis, RabbitMQ)
 pnpm --filter @antre/web-staff dev    # dev server web staff di http://localhost:5173
 pnpm --filter @antre/web-staff build  # build produksi web staff
@@ -258,9 +279,10 @@ docker build -f infra/docker/Dockerfile --target core-services -t antre/core-ser
 Traefik v3 + semua image di atas + PostgreSQL/Redis/RabbitMQ pada jaringan internal `data` (tanpa akses keluar, tanpa port host). Hanya gateway yang membuka port host: `127.0.0.1:18080` (HTTP) dan `127.0.0.1:18443` (HTTPS dengan sertifikat self-signed bawaan Traefik). Port dev (35432, 36379, 35672, 45672) dan PostgreSQL lokal 5432 tidak dipakai.
 
 ```bash
+# Git Bash / Linux. PowerShell: Copy-Item .env.prod.example .env.prod ; rahasia: -join ((1..32 | % { "{0:x2}" -f (Get-Random -Max 256) }))
 cp .env.prod.example .env.prod          # ganti SEMUA CHANGE_ME; buat rahasia dengan: openssl rand -hex 32
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --wait
-bash infra/docker/smoke-prod.sh         # smoke test lewat gateway (butuh curl, node, openssl)
+bash infra/docker/smoke-prod.sh         # smoke test lewat gateway (butuh bash, curl, node, openssl: jalankan di Git Bash atau WSL)
 docker compose --env-file .env.prod -f docker-compose.prod.yml down -v   # hapus stack beserta volume (project antre-prod)
 ```
 

@@ -8,4 +8,20 @@ export default defineConfig([
   js.configs.recommended,
   tseslint.configs.recommended,
   eslintConfigPrettier,
+  {
+    // Skrip Node di scripts/ (ESM biasa): global bawaan Node 22.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        fetch: 'readonly',
+        setTimeout: 'readonly',
+        setInterval: 'readonly',
+        AbortController: 'readonly',
+        AbortSignal: 'readonly',
+        URL: 'readonly',
+      },
+    },
+  },
 ]);

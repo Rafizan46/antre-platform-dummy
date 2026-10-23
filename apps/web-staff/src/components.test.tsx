@@ -4,9 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import type { Resource, Ticket } from './api/schemas';
+import { ManualTicketForm } from './dashboard/ManualTicketForm';
 import { ServiceQueue } from './dashboard/TicketList';
 import type { EventSourceLike } from './kiosk/connection';
 import { useRealtimeFeed } from './lib/hooks';
+import { ResourceForm } from './settings/ResourcesTab';
 import { EMPTY_SERVICE, ServiceForm } from './settings/ServicesTab';
 
 afterEach(() => {
@@ -144,6 +146,32 @@ describe('ServiceForm', () => {
         dp_amount: null,
       }),
     );
+  });
+});
+
+describe('ManualTicketForm', () => {
+  it('tells the user to add a service when none is active, and disables submit', () => {
+    render(<ManualTicketForm services={[]} busy={false} onSubmit={vi.fn(async () => true)} />);
+    expect(screen.getByText(/Belum ada layanan aktif/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Buat tiket' }).hasAttribute('disabled')).toBe(true);
+  });
+});
+
+describe('ResourceForm', () => {
+  it('offers only active services as choices', () => {
+    const service = (id: string, name: string, is_active: boolean) =>
+      ({ id, name, is_active, ticket_prefix: 'A', avg_duration_min: 10 }) as never;
+    render(
+      <ResourceForm
+        initial={{ name: '', type: '', active: true, serviceIds: [] }}
+        services={[service('1', 'Aktif satu', true), service('2', 'Sudah mati', false)]}
+        busy={false}
+        submitLabel="Simpan"
+        onSubmit={vi.fn(async () => true)}
+      />,
+    );
+    expect(screen.getByLabelText('Aktif satu')).toBeTruthy();
+    expect(screen.queryByLabelText('Sudah mati')).toBeNull();
   });
 });
 

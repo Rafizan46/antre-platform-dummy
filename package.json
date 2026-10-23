@@ -19,6 +19,13 @@
     "rt:test:integration": "pnpm --filter @antre/realtime-gateway test:integration",
     "e2e": "pnpm --filter @antre/core-services --filter @antre/notification-worker --filter @antre/wa-channel --filter @antre/realtime-gateway build && pnpm --filter @antre/e2e test:e2e",
     "wa": "node scripts/wa.mjs",
+    "dev:all": "node scripts/dev-all.mjs",
+    "dev:stop": "node scripts/dev-stop.mjs",
+    "demo:seed": "node scripts/demo-seed.mjs",
+    "demo:superadmin": "node scripts/demo-superadmin.mjs",
+    "admin:tenants": "node scripts/admin-tenants.mjs",
+    "pay": "node scripts/pay.mjs",
+    "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
