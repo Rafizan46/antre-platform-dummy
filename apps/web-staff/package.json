@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@antre/shared-types": "workspace:*",
+    "@fontsource/jetbrains-mono": "5.3.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"

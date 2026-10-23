@@ -76,6 +76,7 @@ body {
   font-size: 7vw;
   font-weight: 800;
   letter-spacing: 0.2vw;
+  white-space: nowrap;
 }
 
 .kiosk-latest {

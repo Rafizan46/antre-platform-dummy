@@ -109,52 +109,54 @@ export function HoursTab({ locationId }: { locationId: string }) {
         value={interval}
         onChange={(e) => setIntervalValue(e.target.value)}
       />
-      <table className="table">
-        <caption className="visually-hidden">Jam operasional per hari</caption>
-        <thead>
-          <tr>
-            <th scope="col">Hari</th>
-            <th scope="col">Buka</th>
-            <th scope="col">Tutup</th>
-            <th scope="col">Istirahat mulai</th>
-            <th scope="col">Istirahat selesai</th>
-          </tr>
-        </thead>
-        <tbody>
-          {DAYS.map(({ dow, label }) => {
-            const row = rows[dow] ?? DEFAULT_ROW;
-            return (
-              <tr key={dow}>
-                <th scope="row">
-                  <CheckField
-                    label={label}
-                    checked={row.open}
-                    onChange={(e) => patch(dow, { open: e.target.checked })}
-                  />
-                </th>
-                {(['openTime', 'closeTime', 'breakStart', 'breakEnd'] as const).map((field) => (
-                  <td key={field}>
-                    <input
-                      type="time"
-                      aria-label={`${label}: ${
-                        {
-                          openTime: 'buka',
-                          closeTime: 'tutup',
-                          breakStart: 'istirahat mulai',
-                          breakEnd: 'istirahat selesai',
-                        }[field]
-                      }`}
-                      value={row[field]}
-                      disabled={!row.open}
-                      onChange={(e) => patch(dow, { [field]: e.target.value })}
+      <div className="table-scroll">
+        <table className="table">
+          <caption className="visually-hidden">Jam operasional per hari</caption>
+          <thead>
+            <tr>
+              <th scope="col">Hari</th>
+              <th scope="col">Buka</th>
+              <th scope="col">Tutup</th>
+              <th scope="col">Istirahat mulai</th>
+              <th scope="col">Istirahat selesai</th>
+            </tr>
+          </thead>
+          <tbody>
+            {DAYS.map(({ dow, label }) => {
+              const row = rows[dow] ?? DEFAULT_ROW;
+              return (
+                <tr key={dow}>
+                  <th scope="row">
+                    <CheckField
+                      label={label}
+                      checked={row.open}
+                      onChange={(e) => patch(dow, { open: e.target.checked })}
                     />
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  </th>
+                  {(['openTime', 'closeTime', 'breakStart', 'breakEnd'] as const).map((field) => (
+                    <td key={field}>
+                      <input
+                        type="time"
+                        aria-label={`${label}: ${
+                          {
+                            openTime: 'buka',
+                            closeTime: 'tutup',
+                            breakStart: 'istirahat mulai',
+                            breakEnd: 'istirahat selesai',
+                          }[field]
+                        }`}
+                        value={row[field]}
+                        disabled={!row.open}
+                        onChange={(e) => patch(dow, { [field]: e.target.value })}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       <button type="submit" className="primary" disabled={action.busy}>
         Simpan jam operasional
       </button>
