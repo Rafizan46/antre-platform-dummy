@@ -59,6 +59,8 @@ body {
 }
 
 .kiosk-counter {
+  container-type: inline-size;
+  min-width: 0;
   background: #1e293b;
   border-radius: 1vw;
   padding: 1.5vw;
@@ -73,9 +75,10 @@ body {
 
 .kiosk-number {
   margin: 0.5vw 0 0;
-  font-size: 7vw;
+  /* Adaptif: muat di lebar kartu untuk --chars karakter (nomor panjang seperti AB-1000 ikut mengecil). */
+  font-size: min(7vw, calc(100cqw / (var(--chars, 5) * 0.75)));
   font-weight: 800;
-  letter-spacing: 0.2vw;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
@@ -111,8 +114,10 @@ body {
 }
 
 .kiosk-activate {
-  position: fixed;
-  inset: auto 2vw 2vw auto;
+  /* Sticky di akhir alur: tidak menutupi konten, tetap terlihat di dasar layar. */
+  position: sticky;
+  bottom: 2vw;
+  align-self: flex-end;
   padding: 1vw 2vw;
   font-size: 1.5vw;
   border: 0;
@@ -132,5 +137,84 @@ body {
 @keyframes kiosk-pulse {
   50% {
     transform: scale(1.04);
+  }
+}
+
+/* Tablet dan ponsel: kartu loket dan panel panggilan terakhir menumpuk vertikal. */
+@media (max-width: 1024px) {
+  .kiosk {
+    padding: 4vw;
+    gap: 3vw;
+  }
+  .kiosk-header h1 {
+    font-size: clamp(1.4rem, 5vw, 2.4rem);
+  }
+  .kiosk-status {
+    font-size: clamp(0.8rem, 2.2vw, 1.1rem);
+    padding: 0.3em 0.9em;
+  }
+  .kiosk-main {
+    grid-template-columns: 1fr;
+    gap: 3vw;
+    flex: 0 1 auto;
+  }
+  .kiosk-counters {
+    grid-template-columns: repeat(auto-fill, minmax(40vw, 1fr));
+    gap: 3vw;
+  }
+  .kiosk-counter {
+    border-radius: 12px;
+    padding: 3vw;
+  }
+  .kiosk-counter h2 {
+    font-size: clamp(1rem, 3vw, 1.5rem);
+  }
+  .kiosk-number {
+    margin-top: 1vw;
+    font-size: min(12vw, calc(100cqw / (var(--chars, 5) * 0.75)));
+  }
+  .kiosk-recent {
+    border-radius: 12px;
+    padding: 3vw;
+    font-size: clamp(1rem, 2.6vw, 1.3rem);
+  }
+  .kiosk-recent h2 {
+    font-size: clamp(1.1rem, 3vw, 1.5rem);
+  }
+  .kiosk-recent ol {
+    padding-left: 1.6em;
+  }
+  .kiosk-empty {
+    font-size: clamp(1rem, 3vw, 1.5rem);
+  }
+  .kiosk-activate {
+    bottom: 3vw;
+    padding: 0.7em 1.2em;
+    font-size: clamp(0.85rem, 2.4vw, 1.1rem);
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .kiosk {
+    padding: 16px;
+    gap: 16px;
+  }
+  .kiosk-main {
+    gap: 16px;
+  }
+  .kiosk-counters {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .kiosk-counter {
+    padding: 16px;
+  }
+  .kiosk-number {
+    font-size: min(22vw, calc(100cqw / (var(--chars, 5) * 0.75)));
+  }
+  .kiosk-activate {
+    align-self: stretch;
+    bottom: 12px;
   }
 }

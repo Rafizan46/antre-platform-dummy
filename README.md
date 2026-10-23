@@ -80,6 +80,28 @@ Setelah `dev:all` siap, buka http://127.0.0.1:5173 dan login dengan kredensial y
 - Panduan uji manual lengkap: `docs/manual-testing.md`.
 - `pnpm test:scripts` menjalankan tes unit skrip di `scripts/`.
 
+## Tangkapan layar UI (`pnpm screenshots`)
+
+Menghasilkan PNG seluruh UI (login, registrasi dengan dropdown terbuka, dashboard kosong/bertiket/Dipanggil/Dilayani, reservasi, tujuh tab Pengaturan, kiosk TV, contoh galat dan validasi) lewat Chrome/Edge/Chromium headless. Tanpa dependensi baru (CDP lewat WebSocket bawaan Node 22). Desktop 1440x900 untuk semua layar; tablet 768x1024 dan ponsel 390x844 untuk login, dashboard, tab Layanan, dan kiosk; kiosk juga di 1920x1080.
+
+```sh
+pnpm dev:all && pnpm demo:seed       # lalu, di terminal lain:
+pnpm screenshots                     # memakai stack yang berjalan (web 5173, API 3000)
+pnpm screenshots --start             # atau nyalakan stack terisolasi sendiri, lalu matikan
+```
+
+| Opsi                     | Arti                                                                                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--url`, `--api`, `--wa` | Web staf (bawaan `http://127.0.0.1:5173`), API core (`:3000`), WA Channel (dari `.run/state.json` atau `:3200`)                                                                 |
+| `--start`                | Stack terisolasi: project compose `antre-shots`, port 57000+ (`--base-port`), `.run/screenshots-stack`; dimatikan dan volumenya dihapus di akhir; stack dev Anda tidak disentuh |
+| `--no-build`             | Dengan `--start`: lewati build service                                                                                                                                          |
+| `--out <dir>`            | Folder keluaran (bawaan `.run/screenshots/<timestamp>/`, juga disalin ke `.run/screenshots/latest/`)                                                                            |
+| `--only login,kiosk`     | Hanya layar tertentu (`--list` menampilkan nama); `--width W --height H` memakai satu ukuran untuk semua layar                                                                  |
+
+Hasil: PNG bernomor (`08-dashboard-dilayani-phone.png`) dan `index.md` (berkas, viewport, URL, ukuran, peringatan, galat konsol); folder `.run/` tidak di-commit. Tanpa `--start`, skrip hanya membaca dan mengisi data demo (idempoten: tenant `klinik-demo` dan `klinik-kosong`, tiket baru lewat webhook WA, token kiosk baru) dan tidak mematikan apa pun.
+
+Catatan keamanan Chrome: browser dijalankan dengan profil sementara sendiri (`--user-data-dir` di folder temp, dihapus di akhir) sehingga terpisah dari Chrome pribadi Anda; port debug acak dan hanya `127.0.0.1`; hanya PID milik skrip yang dimatikan (tidak ada `pkill`/`taskkill` berdasarkan nama). `--no-sandbox` hanya ditambahkan bila skrip berjalan sebagai root (mis. kontainer CI). Pilih browser dengan env `CHROME_PATH` bila tidak terdeteksi otomatis.
+
 ## Perintah
 
 ```sh

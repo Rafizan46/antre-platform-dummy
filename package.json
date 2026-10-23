@@ -25,6 +25,7 @@
     "demo:superadmin": "node scripts/demo-superadmin.mjs",
     "admin:tenants": "node scripts/admin-tenants.mjs",
     "pay": "node scripts/pay.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
     "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

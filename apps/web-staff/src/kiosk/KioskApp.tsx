@@ -1,6 +1,6 @@
 // Kiosk TV screen (FR-REALTIME-02/03): counters with the number being called, the recent calls,
 // live over SSE with automatic reconnect, chime + TTS for each new call, and full screen mode.
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react';
 import type { RealtimeUpdate } from '@antre/messaging/realtime';
 
 import { createAnnouncer, type Announcer } from './announce';
@@ -53,7 +53,12 @@ export function KioskBoard(props: {
                 }${counter.status === 'CALLED' || counter.status === 'SERVING' ? '' : ' kiosk-done'}`}
               >
                 <h2>{counter.resource}</h2>
-                <p className="kiosk-number">{counter.ticketNumber}</p>
+                <p
+                  className="kiosk-number"
+                  style={{ '--chars': Math.max(5, counter.ticketNumber.length) } as CSSProperties}
+                >
+                  {counter.ticketNumber}
+                </p>
               </article>
             ))
           )}
