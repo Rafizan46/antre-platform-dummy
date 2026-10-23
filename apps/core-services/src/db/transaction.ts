@@ -3,12 +3,15 @@
 // never leak to the next user of a pooled connection. Session-level SET is forbidden.
 import type pg from 'pg';
 
+import { guardCheckedOutClient } from './pool-errors.js';
+
 export async function withTransaction<T>(
   pool: pg.Pool,
   tenantId: string | null,
   work: (client: pg.PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await pool.connect();
+  const unguard = guardCheckedOutClient(client);
   let releaseError: Error | undefined;
   try {
     await client.query('BEGIN');
@@ -27,6 +30,7 @@ export async function withTransaction<T>(
     }
     throw error;
   } finally {
+    unguard();
     client.release(releaseError);
   }
 }

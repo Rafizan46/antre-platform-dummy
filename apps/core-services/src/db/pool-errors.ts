@@ -13,3 +13,17 @@ export function handlePoolErrors(pool: pg.Pool, name: string, log: () => WarnLog
     log().warn({ pool: name, err: { message: error.message } }, 'idle database connection error');
   });
 }
+
+/**
+ * While a client is checked out the pool no longer listens to its 'error' event, so a connection
+ * the server drops in that time (between two queries of a transaction or a long job) would be an
+ * uncaught exception. The next query on the client rejects with the same failure and the caller
+ * releases it with an error, which makes the pool discard it. Returns the function that detaches.
+ */
+export function guardCheckedOutClient(client: pg.PoolClient): () => void {
+  const swallow = (): void => undefined;
+  client.on('error', swallow);
+  return () => {
+    client.off('error', swallow);
+  };
+}

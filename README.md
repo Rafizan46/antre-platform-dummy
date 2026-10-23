@@ -4,20 +4,21 @@ Monorepo platform SaaS antrean virtual dan reservasi slot multi-tenant untuk UMK
 
 ## Struktur
 
-| Path                                         | Isi                                                                     | Status                                  |
-| -------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------- |
-| `apps/gateway`                               | Catatan API Gateway Traefik (konfigurasi: `infra/traefik`, `infra/k8s`) | aktif                                   |
-| `apps/core-services`                         | Tenant & Auth, Catalog, Queue (Fastify)                                 | aktif                                   |
-| `apps/wa-channel`                            | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)         | aktif                                   |
-| `apps/realtime-gateway`                      | Realtime SSE Gateway (Fastify)                                          | aktif                                   |
-| `apps/notification-worker`                   | Konsumer RabbitMQ pengirim pesan WhatsApp                               | aktif                                   |
-| `apps/web-staff`                             | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite)       | Dashboard staf/owner dan Kiosk TV aktif |
-| `packages/shared-types`                      | `@antre/shared-types`: enum status dan role                             | aktif                                   |
-| `packages/event-contracts`                   | `@antre/event-contracts`: envelope dan katalog event                    | aktif                                   |
-| `packages/messaging`                         | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event         | aktif                                   |
-| `packages/db`                                | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS           | aktif                                   |
-| `infra/docker`, `infra/traefik`, `infra/k8s` | Dockerfile multi-stage, gateway Traefik, manifest k3s (kustomize)       | aktif                                   |
-| `.github/workflows`                          | CI GitHub Actions                                                       | aktif                                   |
+| Path                                         | Isi                                                                          | Status                                  |
+| -------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------- |
+| `apps/gateway`                               | Catatan API Gateway Traefik (konfigurasi: `infra/traefik`, `infra/k8s`)      | aktif                                   |
+| `apps/core-services`                         | Tenant & Auth, Catalog, Queue (Fastify)                                      | aktif                                   |
+| `apps/wa-channel`                            | WA Channel Service: webhook Meta dan mesin percakapan (Fastify)              | aktif                                   |
+| `apps/realtime-gateway`                      | Realtime SSE Gateway (Fastify)                                               | aktif                                   |
+| `apps/notification-worker`                   | Konsumer RabbitMQ pengirim pesan WhatsApp                                    | aktif                                   |
+| `apps/web-staff`                             | Web staff: Dashboard, Konsol Super Admin, Kiosk TV (React + Vite)            | Dashboard staf/owner dan Kiosk TV aktif |
+| `packages/shared-types`                      | `@antre/shared-types`: enum status dan role                                  | aktif                                   |
+| `packages/event-contracts`                   | `@antre/event-contracts`: envelope dan katalog event                         | aktif                                   |
+| `packages/messaging`                         | `@antre/messaging`: topologi RabbitMQ, koneksi, publisher event              | aktif                                   |
+| `packages/db`                                | `@antre/db`: migrasi SQL (node-pg-migrate), role dev, tes RLS                | aktif                                   |
+| `infra/docker`, `infra/traefik`, `infra/k8s` | Dockerfile multi-stage, gateway Traefik, manifest k3s (kustomize)            | aktif                                   |
+| `e2e`                                        | `@antre/e2e`: tes E2E customer journey (Vitest) terhadap service hasil build | aktif                                   |
+| `.github/workflows`                          | CI GitHub Actions                                                            | aktif                                   |
 
 ## Prasyarat
 
@@ -68,6 +69,7 @@ pnpm -r lint                          # ESLint
 pnpm -r test                          # Vitest
 pnpm format                           # Prettier, menulis perubahan
 pnpm format:check                     # Prettier, cek saja (dipakai CI)
+pnpm e2e                              # build 4 service lalu jalankan tes E2E (butuh PostgreSQL, Redis, RabbitMQ)
 pnpm --filter @antre/web-staff dev    # dev server web staff di http://localhost:5173
 pnpm --filter @antre/web-staff build  # build produksi web staff
 ```
@@ -383,12 +385,38 @@ Temuan:
 - `GET /queues/tickets` mengembalikan semua tiket aktif lokasi tanpa paginasi; dengan antrean ribuan tiket (uji awal tanpa SERVE/COMPLETE) payload dan CPU PostgreSQL membesar. Tidak dibatasi di S14 (antrean nyata kecil).
 - Tidak ada indeks atau N+1 yang terbukti jadi penyebab utama; `expireStaleTickets` (UPDATE tiap operasi antrean) memindai tiket aktif per lokasi dan perlu dipantau bila antrean besar.
 
+## Uji E2E (S15)
+
+`pnpm e2e` membangun core-services, notification-worker, wa-channel, dan realtime-gateway, lalu menjalankan tes journey pelanggan di `e2e/` (paket privat `@antre/e2e`, Vitest, tanpa dependensi tambahan; HTTP dan SSE memakai `fetch` bawaan Node).
+
+Prasyarat: PostgreSQL, Redis, dan RabbitMQ (dengan management API) yang bisa dijangkau lewat variabel yang sama dengan tes integrasi lain (`DATABASE_ADMIN_URL`, `DATABASE_MIGRATOR_URL`, `DATABASE_APP_URL`, `DATABASE_PLATFORM_ADMIN_URL`, `REDIS_URL`, `RABBITMQ_URL`, `RABBITMQ_MANAGEMENT_URL`; default `.env.example` = stack dev, variabel shell menang). Host harus `127.0.0.1` atau `localhost`.
+
+```sh
+docker compose -f docker-compose.dev.yml up -d --wait   # atau kontainer sementara + variabel env di atas
+pnpm e2e                                                # sekitar 40 detik termasuk build
+E2E_KEEP_LOGS=1 pnpm e2e                                # simpan log service (JSON) di folder temp bila gagal
+```
+
+Harness (`e2e/src/global-setup.ts`): membuat database `antre_e2e` (peran + migrasi) dan vhost RabbitMQ `antre_e2e` yang bersih, mengosongkan Redis database 11 (stack dev memakai 0; tes lain 12 dan 13), lalu men-spawn empat service dari `dist` sebagai proses anak pada port acak dengan rahasia acak (NODE_ENV=test, adapter WA `sandbox`) dan menunggu `/readyz`. Semua dihapus di teardown (Windows dan Linux), jadi aman dijalankan berdampingan dengan stack dev. Balasan WhatsApp dibaca dari log JSON worker (adapter sandbox mencetak tiap pesan; nomor di log disamarkan sehingga tiap pelanggan uji diberi 4 digit akhir unik). Service terhubung ke RabbitMQ lewat proxy TCP milik harness; memutus proxy itu mensimulasikan broker mati tanpa menyentuh RabbitMQ bersama.
+
+| Berkas (`e2e/tests`)    | Journey                                                                                                                                                                                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `01-owner-onboarding`   | register (duplikat 409), login (salah 401), layanan tanpa dan dengan DP (validasi 400), resource, relasi, jam seharian, mode BOTH, staf CALLER/CASHIER (batas role), token kiosk (stream ya, API staf tidak)                                                      |
+| `02-walk-in`            | WA `ANTRE <slug> <kode>` → menu → layanan → tiket; balasan, tiket di API staf, SSE staf dan kiosk `created` tanpa PII; CALL_NEXT (kiosk + pesan dipanggil), RECALL, SERVE, COMPLETE; STATUS dan BATAL tanpa sesi Redis                                            |
+| `03-reservation`        | reservasi layanan ber-DP sampai hold, callback QRIS ber-HMAC (palsu 401, nominal salah membatalkan, duplikat idempoten) → CONFIRMED + pesan; pelanggan lain tidak bisa mengambil slot yang sama (menu dan hold internal 409); batal membebaskan slot              |
+| `04-quota-billing`      | 100 tiket FREE lewat endpoint internal, ke-101 ditolak 402 (staf dan WA sopan, admin diberi tahu), checkout owner, callback langganan ber-HMAC → ACTIVE → tiket lanjut                                                                                            |
+| `05-security-isolation` | tenant kedua tidak melihat atau mengubah data tenant pertama (API dan SSE), JWT palsu 401 (API dan stream), tanda tangan webhook salah 401, callback pembayaran tanpa tanda tangan 401, `/internal` tertutup untuk token pengguna dan tidak ada di service publik |
+| `06-resilience`         | broker diputus: tiket tetap jadi, webhook 503, setelah pulih pesan terkirim dan webhook normal; koneksi PostgreSQL di-terminate 3 kali: core dan worker tidak crash dan pulih (regresi BUG-1)                                                                     |
+
+Tidak diotomatiskan di sini: dashboard dan kiosk di browser (chime/TTS), Super Admin suspend, pengingat booking terjadwal, dan menghentikan RabbitMQ/PostgreSQL sungguhan (lihat `docs/manual-testing.md` dan `docs/checklist-pengujian.md`).
+
 ## CI
 
-`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan lima job (`check`, `db-integration`, `images`, `manifests`, `observability`); `.github/workflows/smoke.yml` terpisah (manual atau Senin 03:00 UTC):
+`.github/workflows/ci.yml` berjalan pada pull request ke `main` dan push ke `main` dengan enam job (`check`, `db-integration`, `e2e`, `images`, `manifests`, `observability`); `.github/workflows/smoke.yml` terpisah (manual atau Senin 03:00 UTC):
 
 - `check`: install (`--frozen-lockfile`), cek format, lint, typecheck, test, dan build core-services, notification-worker, wa-channel, realtime-gateway, serta web-staff.
 - `db-integration`: PostgreSQL 16 (port host 35432 dan kredensial dev yang sama dengan `docker-compose.dev.yml`), Redis 8 (port host 36379, sesuai `REDIS_URL` di `.env.example`), dan RabbitMQ 4.3 dengan management (port host 35672 dan 45672, sesuai `RABBITMQ_URL` dan `RABBITMQ_MANAGEMENT_URL`) sebagai service container, lalu `pnpm db:setup`, rollback dan terapkan ulang migrasi terakhir, `pnpm db:test:integration`, `pnpm core:test:integration` (tes API Tenant & Auth, Catalog, Queue, Booking, callback pembayaran, langganan dan konsol Super Admin, publish saat broker mati, endpoint internal WhatsApp), `pnpm notif:test:integration`, `pnpm wa:test:integration`, lalu `pnpm rt:test:integration`.
+- `e2e`: service container PostgreSQL/Redis/RabbitMQ seperti `db-integration`, lalu `pnpm e2e` (build empat service dan jalankan semua journey).
 - `images`: build semua image (target Dockerfile) dengan cache GitHub Actions, tanpa push.
 - `manifests`: render kustomize base/dev/prod, validasi dengan kubeconform (termasuk CRD Traefik), `docker compose config` untuk berkas dev, prod, dan prod + observability, dan cek salinan `db-roles.sql`.
 - `observability`: `promtool check config` (termasuk aturan alert) lewat image `prom/prometheus` dan validasi JSON dashboard Grafana.

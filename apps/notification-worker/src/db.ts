@@ -12,6 +12,11 @@ export async function withTransaction<T>(
   work: (client: pg.PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await pool.connect();
+  // A checked-out client is not watched by the pool: a connection the server drops between two
+  // queries must not become an uncaught exception. The next query rejects and the client is
+  // released with an error, so the pool discards it.
+  const ignoreClientError = (): void => undefined;
+  client.on('error', ignoreClientError);
   let releaseError: Error | undefined;
   try {
     await client.query('BEGIN');
@@ -29,6 +34,7 @@ export async function withTransaction<T>(
     }
     throw error;
   } finally {
+    client.off('error', ignoreClientError);
     client.release(releaseError);
   }
 }

@@ -6,6 +6,7 @@
 import type { EventEnvelope } from '@antre/event-contracts';
 import type pg from 'pg';
 
+import { guardCheckedOutClient } from '../db/pool-errors.js';
 import { withTransaction } from '../db/transaction.js';
 import type { EventPublisher } from '../events/publisher.js';
 import { publishAll } from '../events/publisher.js';
@@ -53,6 +54,7 @@ export async function runAsLeader(
   work: () => Promise<number>,
 ): Promise<JobResult> {
   const client = await deps.pool.connect();
+  const unguard = guardCheckedOutClient(client);
   let releaseError: Error | undefined;
   try {
     const lock = await client.query<{ locked: boolean }>(
@@ -74,6 +76,7 @@ export async function runAsLeader(
       }
     }
   } finally {
+    unguard();
     client.release(releaseError);
   }
 }

@@ -3,6 +3,7 @@ packages:
   # apps/gateway holds Traefik configuration, not a Node package.
   - '!apps/gateway'
   - 'packages/*'
+  - 'e2e'
 
 # Exact versions shared by every workspace package ("catalog:" in package.json).
 catalog:
