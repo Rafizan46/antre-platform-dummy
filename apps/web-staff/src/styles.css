@@ -1,215 +1,990 @@
 :root {
-  --bg: #f4f6f8;
-  --card: #ffffff;
-  --text: #16202a;
-  --muted: #4b5a68;
-  --border: #c5ced6;
-  --accent: #0f5f8c;
-  --accent-text: #ffffff;
-  --danger: #a31d1d;
-  --ok: #17663a;
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
+  /* ==========================================================================
+     Aime Design Tokens v2 (design.md)
+     ========================================================================== */
+
+  /* Brand & Accent */
+  --aime-brand-default: #10b981;
+  --aime-brand-hover: #059669;
+  --aime-brand-active: #047857;
+  --aime-brand-disable: rgba(16, 185, 129, 0.32);
+  --aime-text-brand: #059669;
+
+  /* Surface */
+  --aime-bg-page: #f1f5f9;
+  --aime-bg-panel: #ffffff;
+  --aime-bg-menu: #f8fafc;
+  --aime-bg-overlay-1: rgba(91, 100, 117, 0.06);
+  --aime-bg-overlay-2: rgba(91, 100, 117, 0.1);
+  --aime-bg-overlay-3: rgba(91, 100, 117, 0.14);
+  --aime-bg-disabled: #cbd5e1;
+  --aime-page-gradient: linear-gradient(rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.08));
+
+  /* Primary Button / Active Pill Accent (Slate Navy - softer & more elegant than harsh pitch-black) */
+  --aime-primary-btn: #1e293b;
+  --aime-primary-btn-hover: #334155;
+  --aime-primary-btn-active: #0f172a;
+
+  /* Neutral Cool Gray Scale */
+  --aime-gray-1: #f8fafc;
+  --aime-gray-2: #f1f5f9;
+  --aime-gray-3: #e2e8f0;
+  --aime-gray-4: #cbd5e1;
+  --aime-gray-5: #94a3b8;
+  --aime-gray-6: #64748b;
+  --aime-gray-7: #475569;
+  --aime-gray-8: #334155;
+  --aime-gray-9: #1e293b;
+  --aime-gray-10: #0f172a;
+
+  /* Text Hierarchy */
+  --aime-text-highlight: #0f172a;
+  --aime-text-default: #334155;
+  --aime-text-subtle: #475569;
+  --aime-text-muted: #64748b;
+  --aime-text-disabled: #94a3b8;
+  --aime-text-inverse: #ffffff;
+
+  /* Line & Border */
+  --aime-border-subtle: rgba(148, 163, 184, 0.2);
+  --aime-border-default: rgba(148, 163, 184, 0.35);
+  --aime-border-bold: rgba(100, 116, 139, 0.5);
+
+  /* Semantic Feedback */
+  --aime-success-fg: #15803d;
+  --aime-success-bg: rgba(34, 197, 94, 0.1);
+  --aime-success-border: rgba(34, 197, 94, 0.3);
+
+  --aime-danger-fg: #dc2626;
+  --aime-danger-bg: rgba(239, 68, 68, 0.1);
+  --aime-danger-border: rgba(239, 68, 68, 0.3);
+
+  --aime-info-fg: #2563eb;
+  --aime-info-bg: rgba(37, 99, 235, 0.1);
+  --aime-info-border: rgba(37, 99, 235, 0.3);
+
+  --aime-warning-fg: #d97706;
+  --aime-warning-bg: rgba(245, 158, 11, 0.12);
+  --aime-warning-border: rgba(245, 158, 11, 0.32);
+
+  /* Typography */
+  --aime-font-cjk:
+    PingFang SC, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', 'Microsoft YaHei',
     sans-serif;
-  color: var(--text);
-  background: var(--bg);
+  --aime-font-en: SF Pro, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --aime-font-digital: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Spacing */
+  --aime-inline-xs: 4px;
+  --aime-inline-sm: 8px;
+  --aime-inline-md: 12px;
+  --aime-block-sm: 8px;
+  --aime-block-md: 16px;
+  --aime-block-lg: 24px;
+  --aime-block-xl: 32px;
+  --aime-block-xxl: 40px;
+  --aime-block-xxxl: 48px;
+
+  /* Border Radius */
+  --aime-radius-xs: 2px;
+  --aime-radius-sm: 4px;
+  --aime-radius-default: 6px;
+  --aime-radius-md: 8px;
+  --aime-radius-lg: 12px;
+  --aime-radius-outer: 20px;
+  --aime-radius-pill: 9999px;
+  --aime-radius-full: 9999px;
+
+  /* Elevation & Shadows */
+  --aime-shadow-island: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --aime-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --aime-shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --aime-shadow-dropdown: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.04);
+  --aime-shadow-popover: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --aime-shadow-input-focus: 0 0 0 3px rgba(16, 185, 129, 0.18);
+
+  /* Motion */
+  --aime-motion-fast: 0.12s ease-out;
+  --aime-motion-default: 0.18s ease-out;
+
+  font-family: var(--aime-font-cjk);
+  letter-spacing: 0.2px;
+  color: var(--aime-text-default);
+  background-color: var(--aime-bg-page);
 }
+
 * {
   box-sizing: border-box;
 }
+
 body {
   margin: 0;
-  line-height: 1.45;
+  min-height: 100vh;
+  line-height: 1.55;
+  letter-spacing: 0.2px;
+  font-family: var(--aime-font-cjk);
+  font-size: 14px;
+  color: var(--aime-text-default);
+  background-color: var(--aime-bg-page);
+  background-image: var(--aime-page-gradient);
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Headings with tight, cohesive vertical spacing */
 h1,
 h2,
 h3 {
-  margin: 0 0 0.5rem;
+  margin: 0;
+  color: var(--aime-text-highlight);
+  font-weight: 600;
+  letter-spacing: -0.2px;
 }
+
+h1 {
+  font-size: 22px;
+  line-height: 1.35;
+  margin-bottom: 6px;
+}
+
 h2 {
-  font-size: 1.25rem;
+  font-size: 16px;
+  line-height: 1.4;
+  margin-top: 14px;
+  margin-bottom: 2px;
 }
+
 h3 {
-  font-size: 1.05rem;
+  font-size: 15px;
+  line-height: 1.45;
+  margin-bottom: 4px;
 }
+
 a {
-  color: var(--accent);
+  color: var(--aime-text-brand);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color var(--aime-motion-fast);
 }
+
+a:hover {
+  color: var(--aime-brand-hover);
+  text-decoration: underline;
+}
+
 :focus-visible {
-  outline: 3px solid #e6a100;
-  outline-offset: 2px;
+  outline: none;
+  border-color: var(--aime-border-bold);
+  box-shadow: var(--aime-shadow-input-focus);
 }
+
 .visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
-  clip: rect(0 0 0 0);
+  clip: rect(0, 0, 0, 0);
   white-space: nowrap;
+  border: 0;
 }
+
 .skip-link {
   position: absolute;
   left: -999px;
 }
+
 .skip-link:focus {
-  left: 0.5rem;
-  top: 0.5rem;
-  background: #fff;
-  padding: 0.5rem;
-  z-index: 10;
+  left: 16px;
+  top: 16px;
+  background: var(--aime-bg-panel);
+  padding: 8px 16px;
+  border-radius: var(--aime-radius-default);
+  border: 1px solid var(--aime-border-default);
+  box-shadow: var(--aime-shadow-popover);
+  z-index: 100;
 }
+
+/* ==========================================================================
+   Full Width Page Container
+   ========================================================================== */
+.page {
+  width: 100%;
+  max-width: 1440px;
+  margin: 12px auto;
+  padding: 0 28px 48px;
+}
+
+/* ==========================================================================
+   Topbar / Navbar (Full Width, Sticky, Polished)
+   ========================================================================== */
 .topbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
-  padding: 0.6rem 1rem;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 0 32px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--aime-border-subtle);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  width: 100%;
 }
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.brand {
+  color: var(--aime-text-highlight);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--aime-brand-default);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  display: inline-block;
+}
+
 .topbar nav {
   display: flex;
-  gap: 1rem;
-  flex: 1;
+  align-items: center;
+  gap: 6px;
 }
+
+.topbar nav a {
+  color: var(--aime-text-subtle);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: var(--aime-radius-default);
+  text-decoration: none;
+  transition: all var(--aime-motion-fast);
+}
+
+.topbar nav a:hover {
+  background-color: var(--aime-bg-overlay-1);
+  color: var(--aime-text-default);
+}
+
 .topbar nav a[aria-current='page'] {
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--aime-primary-btn);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.who {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--aime-text-default);
+}
+
+.who-user {
   font-weight: 700;
+  color: var(--aime-text-highlight);
 }
-.brand {
-  color: var(--accent);
-  font-size: 1.2rem;
+
+.btn-logout {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border: 1px solid var(--aime-border-default);
+  background: #ffffff;
+  color: var(--aime-text-subtle);
+  border-radius: var(--aime-radius-default);
+  transition: all var(--aime-motion-fast);
 }
-.page {
-  max-width: 72rem;
-  margin: 0 auto;
-  padding: 1rem;
+
+.btn-logout:hover {
+  background: var(--aime-danger-bg);
+  color: var(--aime-danger-fg);
+  border-color: var(--aime-danger-border);
 }
+
+/* ==========================================================================
+   Auth Layout (Login & Register - Vertically & Horizontally Centered + Navbar)
+   ========================================================================== */
+.auth-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--aime-bg-page);
+  background-image: var(--aime-page-gradient);
+}
+
+.auth-topbar {
+  box-shadow: none;
+  border-bottom: 1px solid var(--aime-border-subtle);
+}
+
+.auth-topbar-link {
+  font-size: 13px;
+  color: var(--aime-text-subtle);
+}
+
+.auth-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
 .auth-page {
-  max-width: 26rem;
-  margin: 2rem auto;
-  padding: 1rem;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
 }
+
+.auth-page-wide {
+  max-width: 640px;
+}
+
+.auth-card {
+  background: var(--aime-bg-panel);
+  border: 1px solid var(--aime-border-default);
+  border-radius: var(--aime-radius-outer);
+  box-shadow: var(--aime-shadow-island);
+  padding: 40px 36px;
+}
+
+.auth-header {
+  margin-bottom: var(--aime-block-md);
+  border-bottom: 1px solid var(--aime-border-subtle);
+  padding-bottom: var(--aime-block-sm);
+}
+
+.auth-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--aime-text-highlight);
+}
+
+.auth-footer {
+  margin-top: var(--aime-block-md);
+  font-size: 13px;
+  color: var(--aime-text-subtle);
+  text-align: center;
+}
+
+/* ==========================================================================
+   Dashboard Components
+   ========================================================================== */
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 12px;
 }
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.9rem;
+
+.dashboard-toolbar {
+  background: var(--aime-bg-panel);
+  border: 1px solid var(--aime-border-default);
+  border-radius: var(--aime-radius-lg);
+  padding: 14px 20px;
+  box-shadow: var(--aime-shadow-card);
 }
-.card-head,
-.row-between,
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: var(--aime-inline-md);
 }
-.toolbar {
-  align-items: flex-end;
+
+/* Live connection indicator */
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: var(--aime-radius-pill);
 }
+
+.conn::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.conn-open {
+  background: var(--aime-success-bg);
+  color: var(--aime-success-fg);
+  border: 1px solid var(--aime-success-border);
+}
+.conn-open::before {
+  background: var(--aime-brand-default);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+
+.conn-connecting,
+.conn-reconnecting {
+  background: var(--aime-warning-bg);
+  color: var(--aime-warning-fg);
+  border: 1px solid var(--aime-warning-border);
+}
+.conn-connecting::before,
+.conn-reconnecting::before {
+  background: var(--aime-warning-fg);
+}
+
+.conn-stopped {
+  background: var(--aime-danger-bg);
+  color: var(--aime-danger-fg);
+  border: 1px solid var(--aime-danger-border);
+}
+.conn-stopped::before {
+  background: var(--aime-danger-fg);
+}
+
+/* Summary metrics cards (Full width grid) */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 0;
+}
+
+.metric-card,
+.metrics > div {
+  background: var(--aime-bg-panel);
+  border: 1px solid var(--aime-border-default);
+  border-radius: var(--aime-radius-lg);
+  padding: 18px 22px;
+  box-shadow: var(--aime-shadow-card);
+  transition: all var(--aime-motion-fast);
+}
+
+.metric-card:hover,
+.metrics > div:hover {
+  border-color: var(--aime-border-bold);
+  box-shadow: var(--aime-shadow-card-hover);
+  transform: translateY(-1px);
+}
+
+.metrics dt {
+  color: var(--aime-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.metrics dd {
+  margin: 0;
+  font-family: var(--aime-font-en), var(--aime-font-digital);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--aime-text-highlight);
+}
+
+/* Island Cards */
+.card {
+  background: var(--aime-bg-panel);
+  border: 1px solid var(--aime-border-default);
+  border-radius: var(--aime-radius-lg);
+  padding: 20px 24px;
+  box-shadow: var(--aime-shadow-card);
+}
+
+.queue-card {
+  box-shadow: var(--aime-shadow-card);
+}
+
+.card-head,
+.row-between {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--aime-inline-sm);
+}
+
+.card-head {
+  border-bottom: 1px solid var(--aime-border-subtle);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.card-head h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Form Alignment (Consistent horizontal baseline across inputs, checkboxes, buttons)
+   ========================================================================== */
 .form-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.8rem;
+  align-items: flex-start;
+  gap: 16px;
 }
+
 .form-row > h3,
 .form-row > fieldset,
 .form-row > .notice {
   flex-basis: 100%;
 }
+
 .inline-form {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--aime-inline-sm);
 }
+
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  min-width: 12rem;
+  gap: 6px;
+  min-width: 14rem;
+  position: relative;
+  justify-content: flex-start;
 }
-.field-check {
+
+.field label {
+  color: var(--aime-text-subtle);
+  font-size: 13px;
+  font-weight: 500;
+  min-height: 18px;
+}
+
+.field small {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--aime-text-muted);
+}
+
+/* Checkboxes directly in .form-row align with input boxes */
+.form-row > .field-check {
   flex-direction: row;
   align-items: center;
   min-width: 0;
-  gap: 0.4rem;
+  min-height: 36px;
+  margin-top: 24px;
+  gap: 8px;
 }
+
+.field-check label {
+  font-size: 14px;
+  color: var(--aime-text-default);
+  font-weight: 400;
+  cursor: pointer;
+  min-height: auto;
+}
+
+/* Form action buttons aligned with input boxes baseline */
+.form-row > .inline-form,
+.form-row > button {
+  margin-top: 24px;
+  min-height: 36px;
+}
+
+/* Fieldset styling: Clean modern box without strange vertical gaps */
+fieldset {
+  border: 1px solid var(--aime-border-default);
+  border-radius: var(--aime-radius-md);
+  padding: 14px 18px;
+  background: var(--aime-bg-menu);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+}
+
+fieldset legend {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--aime-text-highlight);
+  padding: 0 8px;
+}
+
+fieldset .field-check {
+  margin-top: 0;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Inputs, Base Selects, Buttons */
 input,
 select,
 button {
-  font: inherit;
-  min-height: 2.5rem;
-  padding: 0.35rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--aime-border-default);
+  border-radius: var(--aime-radius-default);
+  background: var(--aime-bg-panel);
+  color: var(--aime-text-default);
+  transition: all var(--aime-motion-fast);
 }
+
+input::placeholder {
+  color: var(--aime-text-muted);
+}
+
+input:hover,
+select:hover {
+  border-color: var(--aime-border-bold);
+}
+
+input:focus,
+select:focus {
+  border-color: var(--aime-border-bold);
+  box-shadow: var(--aime-shadow-input-focus);
+  outline: none;
+}
+
 input[type='checkbox'] {
   min-height: 0;
-  width: 1.2rem;
-  height: 1.2rem;
-}
-button {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--aime-brand-default);
   cursor: pointer;
-}
-button.primary {
-  background: var(--accent);
-  color: var(--accent-text);
-  border-color: var(--accent);
-}
-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-fieldset {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.muted {
-  color: var(--muted);
-}
-.badge {
-  display: inline-block;
-  padding: 0.05rem 0.5rem;
-  border-radius: 999px;
-  background: #e3eaf0;
-  color: var(--text);
-  font-size: 0.85rem;
-  font-weight: 400;
-}
-.notice {
-  padding: 0.55rem 0.8rem;
-  border-radius: 6px;
   margin: 0;
 }
+
+button {
+  cursor: pointer;
+  background: var(--aime-bg-overlay-3);
+  color: var(--aime-text-subtle);
+  border: 1px solid transparent;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--aime-inline-xs);
+  transition: all var(--aime-motion-fast);
+}
+
+button:hover {
+  background: var(--aime-bg-overlay-2);
+  color: var(--aime-text-default);
+}
+
+button:active {
+  background: var(--aime-bg-overlay-3);
+  color: var(--aime-text-highlight);
+}
+
+/* Primary Button (Slate Navy: modern, deep, high contrast without being harsh black) */
+button.primary {
+  background: var(--aime-primary-btn);
+  color: #ffffff;
+  border-color: var(--aime-primary-btn);
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--aime-primary-btn-hover);
+  border-color: var(--aime-primary-btn-hover);
+}
+
+button.primary:active:not(:disabled) {
+  background: var(--aime-primary-btn-active);
+  border-color: var(--aime-primary-btn-active);
+}
+
+button:disabled {
+  background: var(--aime-bg-disabled);
+  color: var(--aime-text-disabled);
+  border-color: transparent;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+/* Specific Style for "Buat tiket" Button */
+.btn-create-ticket {
+  background: #10b981 !important;
+  color: #ffffff !important;
+  border: 1px solid #059669 !important;
+  font-weight: 600 !important;
+  padding: 0 20px !important;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
+}
+
+.btn-create-ticket:hover:not(:disabled) {
+  background: #059669 !important;
+  box-shadow: 0 3px 8px rgba(16, 185, 129, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-create-ticket:active:not(:disabled) {
+  background: #047857 !important;
+}
+
+.btn-create-ticket:disabled {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+  border-color: transparent !important;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+/* ==========================================================================
+   Custom Dropdown Component (.custom-select-*)
+   ========================================================================== */
+.custom-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.custom-select-trigger {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--aime-border-default);
+  border-radius: var(--aime-radius-default);
+  background: #ffffff;
+  color: var(--aime-text-default);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 400;
+  transition: all var(--aime-motion-fast);
+}
+
+.custom-select-trigger:hover:not(:disabled) {
+  border-color: var(--aime-border-bold);
+}
+
+.custom-select-wrapper.is-open .custom-select-trigger {
+  border-color: var(--aime-border-bold);
+  box-shadow: var(--aime-shadow-input-focus);
+}
+
+.custom-select-wrapper.is-disabled .custom-select-trigger {
+  background: var(--aime-bg-disabled);
+  color: var(--aime-text-disabled);
+  border-color: transparent;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.custom-select-value {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-select-chevron {
+  color: var(--aime-text-subtle);
+  transition: transform var(--aime-motion-fast);
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.custom-select-chevron.rotate {
+  transform: rotate(180deg);
+}
+
+.custom-select-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  background: #ffffff;
+  border: 1px solid var(--aime-border-default);
+  border-radius: var(--aime-radius-md);
+  box-shadow: var(--aime-shadow-dropdown);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.custom-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--aime-text-default);
+  transition: background-color var(--aime-motion-fast);
+}
+
+.custom-select-option:hover {
+  background-color: var(--aime-bg-overlay-1);
+}
+
+.custom-select-option.selected {
+  background-color: var(--aime-bg-overlay-2);
+  color: var(--aime-text-highlight);
+  font-weight: 600;
+}
+
+.custom-select-option .check-icon {
+  color: var(--aime-brand-default);
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Badges & Distinct Role Colors (Owner = Green, others colored, none red)
+   ========================================================================== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--aime-radius-pill);
+  background: var(--aime-bg-overlay-3);
+  color: var(--aime-text-subtle);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Role Badges */
+.badge-role {
+  font-weight: 600;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: var(--aime-radius-pill);
+}
+
+/* Pemilik (OWNER): Hijau */
+.badge-role-owner {
+  background: rgba(34, 197, 94, 0.14) !important;
+  color: #15803d !important;
+  border: 1px solid rgba(34, 197, 94, 0.35) !important;
+}
+
+/* Staf Pemanggil (STAFF_CALLER): Biru */
+.badge-role-staff_caller {
+  background: rgba(59, 130, 246, 0.14) !important;
+  color: #1d4ed8 !important;
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+}
+
+/* Staf Kasir (STAFF_CASHIER): Ungu */
+.badge-role-staff_cashier {
+  background: rgba(147, 51, 234, 0.14) !important;
+  color: #7e22ce !important;
+  border: 1px solid rgba(147, 51, 234, 0.35) !important;
+}
+
+/* Super Admin (SUPER_ADMIN): Teal (Bukan merah) */
+.badge-role-super_admin {
+  background: rgba(13, 148, 136, 0.14) !important;
+  color: #0f766e !important;
+  border: 1px solid rgba(13, 148, 136, 0.35) !important;
+}
+
+.badge-inactive {
+  background: var(--aime-bg-overlay-2);
+  color: var(--aime-text-muted);
+}
+
+/* Status Badges */
+.badge-called {
+  background: var(--aime-warning-bg);
+  color: var(--aime-warning-fg);
+  border: 1px solid var(--aime-warning-border);
+}
+
+.badge-serving {
+  background: var(--aime-info-bg);
+  color: var(--aime-info-fg);
+  border: 1px solid var(--aime-info-border);
+}
+
+.badge-waiting {
+  background: var(--aime-bg-overlay-2);
+  color: var(--aime-text-subtle);
+}
+
+.badge-completed {
+  background: var(--aime-success-bg);
+  color: var(--aime-success-fg);
+  border: 1px solid var(--aime-success-border);
+}
+
+.badge-cancelled,
+.badge-no_show {
+  background: var(--aime-danger-bg);
+  color: var(--aime-danger-fg);
+  border: 1px solid var(--aime-danger-border);
+}
+
+.notice {
+  padding: 10px 14px;
+  border-radius: var(--aime-radius-default);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
 .notice-error {
-  background: #fde8e8;
-  color: var(--danger);
-  border: 1px solid #f1b5b5;
+  background: var(--aime-danger-bg);
+  color: var(--aime-danger-fg);
+  border: 1px solid var(--aime-danger-border);
 }
+
 .notice-info {
-  background: #e5f2ea;
-  color: var(--ok);
-  border: 1px solid #b4d8c1;
+  background: var(--aime-success-bg);
+  color: var(--aime-success-fg);
+  border: 1px solid var(--aime-success-border);
 }
+
 .empty {
-  padding: 1.2rem;
+  padding: 24px 20px;
   text-align: center;
-  color: var(--muted);
-  border: 1px dashed var(--border);
-  border-radius: 8px;
+  color: var(--aime-text-muted);
+  background: var(--aime-bg-overlay-1);
+  border: 1px dashed var(--aime-border-bold);
+  border-radius: var(--aime-radius-md);
+  font-size: 14px;
 }
+
+/* ==========================================================================
+   Ticket & Queue List
+   ========================================================================== */
 .plain-list,
 .ticket-list {
   list-style: none;
@@ -217,97 +992,183 @@ fieldset {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
 }
+
 .ticket {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  padding: 12px 18px;
+  border: 1px solid var(--aime-border-subtle);
+  border-radius: var(--aime-radius-default);
+  background: var(--aime-bg-panel);
+  transition: all var(--aime-motion-fast);
 }
+
+.ticket:hover {
+  background-color: var(--aime-bg-overlay-1);
+  border-color: var(--aime-border-default);
+}
+
 .ticket-number {
-  font-size: 1.15rem;
-  min-width: 5rem;
+  font-family: var(--aime-font-digital);
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 6rem;
+  color: var(--aime-text-highlight);
+  letter-spacing: 0.5px;
 }
+
 .ticket-name {
   flex: 1;
   min-width: 8rem;
+  font-size: 14px;
+  color: var(--aime-text-default);
 }
+
+.ticket-resource {
+  font-size: 13px;
+  color: var(--aime-text-muted);
+}
+
 .ticket-actions {
   display: flex;
-  gap: 0.4rem;
+  gap: 8px;
   margin-left: auto;
 }
+
+.ticket-actions button {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+  border-radius: var(--aime-radius-default);
+}
+
 .ticket.status-called {
-  background: #fff7e0;
+  background: rgba(245, 159, 0, 0.04);
+  border-color: rgba(245, 159, 0, 0.35);
 }
+
 .ticket.status-serving {
-  background: #e6f1fb;
+  background: rgba(37, 99, 235, 0.04);
+  border-color: var(--aime-info-border);
 }
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  gap: 0.6rem;
-  margin: 0;
-}
-.metrics > div {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem 0.8rem;
-}
-.metrics dt {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-.metrics dd {
-  margin: 0;
-  font-size: 1.6rem;
-  font-weight: 700;
-}
-.conn-open {
-  background: #d6efdf;
-  color: var(--ok);
-}
-.conn-reconnecting,
-.conn-connecting {
-  background: #fff0c2;
-}
+
+/* ==========================================================================
+   Settings Navigation & Tabs
+   ========================================================================== */
 .tabs {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  background: #ffffff;
+  border: 1px solid var(--aime-border-default);
+  border-radius: var(--aime-radius-md);
+  padding: 4px;
+  gap: 4px;
+  box-shadow: var(--aime-shadow-card);
 }
+
 .tab {
-  padding: 0.45rem 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: #fff;
+  padding: 6px 16px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: var(--aime-radius-default);
+  background: transparent;
+  color: var(--aime-text-subtle);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--aime-motion-fast);
+}
+
+.tab:hover {
+  background: var(--aime-bg-overlay-1);
+  color: var(--aime-text-default);
   text-decoration: none;
 }
+
 .tab.active {
-  background: var(--accent);
-  color: var(--accent-text);
-  border-color: var(--accent);
+  background: var(--aime-primary-btn);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
 }
+
 .table {
   width: 100%;
   border-collapse: collapse;
+  background: var(--aime-bg-panel);
+  border-radius: var(--aime-radius-md);
+  overflow: hidden;
+  box-shadow: var(--aime-shadow-card);
 }
+
 .table th,
 .table td {
-  padding: 0.3rem;
+  padding: 12px 16px;
   text-align: left;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--aime-border-subtle);
+  font-size: 13px;
 }
+
+.table th {
+  background: var(--aime-bg-menu);
+  color: var(--aime-text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+
+.table tr:hover td {
+  background: var(--aime-bg-overlay-1);
+}
+
 progress {
   width: 100%;
-  height: 1.2rem;
+  height: 8px;
+  border-radius: var(--aime-radius-pill);
+  accent-color: var(--aime-brand-default);
 }
-@media (max-width: 640px) {
+
+/* ==========================================================================
+   Responsive Adaptations
+   ========================================================================== */
+@media (max-width: 768px) {
+  .topbar {
+    padding: 12px 18px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .topbar-right {
+    margin-left: auto;
+  }
+
+  .page {
+    padding: 0 16px 32px;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ticket {
+    padding: 12px;
+  }
+
   .ticket-actions {
+    width: 100%;
     margin-left: 0;
+    justify-content: flex-end;
+    margin-top: 6px;
+  }
+
+  .auth-card {
+    padding: 28px 20px;
   }
 }

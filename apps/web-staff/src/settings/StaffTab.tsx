@@ -43,25 +43,28 @@ export function StaffTab() {
         {users.data?.map((user) => {
           const isStaff = user.role === 'STAFF_CALLER' || user.role === 'STAFF_CASHIER';
           return (
-            <li key={user.id} className="card row-between">
+            <li key={user.id} className="card row-between staff-card">
               <div>
                 <strong>{user.email}</strong>{' '}
-                <span className="badge">{ROLE_LABELS[user.role]}</span>{' '}
-                {user.is_active ? null : <span className="badge">Nonaktif</span>}
+                <span className={`badge badge-role badge-role-${user.role.toLowerCase()}`}>
+                  {ROLE_LABELS[user.role]}
+                </span>{' '}
+                {user.is_active ? null : <span className="badge badge-inactive">Nonaktif</span>}
                 {user.id === session?.user.id ? <span className="muted"> (Anda)</span> : null}
               </div>
               {isStaff ? (
                 <div className="inline-form">
-                  <label htmlFor={`role-${user.id}`} className="visually-hidden">
-                    Peran {user.email}
-                  </label>
-                  <select
+                  <SelectField
                     id={`role-${user.id}`}
+                    label={`Peran ${user.email}`}
+                    hideLabel
                     value={user.role}
                     disabled={action.busy}
                     onChange={(e) =>
                       void change(() =>
-                        api.updateStaff(user.id, { role: e.target.value as StaffRole }),
+                        api.updateStaff(user.id, {
+                          role: e.target.value as StaffRole,
+                        }),
                       )
                     }
                   >
@@ -70,12 +73,16 @@ export function StaffTab() {
                         {ROLE_LABELS[r]}
                       </option>
                     ))}
-                  </select>
+                  </SelectField>
                   <button
                     type="button"
                     disabled={action.busy}
                     onClick={() =>
-                      void change(() => api.updateStaff(user.id, { is_active: !user.is_active }))
+                      void change(() =>
+                        api.updateStaff(user.id, {
+                          is_active: !user.is_active,
+                        }),
+                      )
                     }
                   >
                     {user.is_active ? 'Nonaktifkan' : 'Aktifkan'}

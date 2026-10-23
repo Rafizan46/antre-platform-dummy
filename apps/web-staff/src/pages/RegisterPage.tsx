@@ -79,9 +79,11 @@ export function RegisterPage() {
   }
 
   return (
-    <main className="auth-page">
-      <form className="card stack" onSubmit={(event) => void submit(event)} noValidate>
-        <h1>Daftarkan bisnis</h1>
+    <main className="auth-page auth-page-wide">
+      <form className="card auth-card stack" onSubmit={(event) => void submit(event)} noValidate>
+        <div className="auth-header">
+          <h1>Daftarkan bisnis</h1>
+        </div>
         {done ? <InfoNotice>Pendaftaran berhasil. Masuk otomatis...</InfoNotice> : null}
         <ErrorNotice message={error} />
         <TextField
@@ -153,7 +155,7 @@ export function RegisterPage() {
         <button type="submit" className="primary" disabled={busy}>
           {busy ? 'Memproses...' : 'Daftar'}
         </button>
-        <p>
+        <p className="auth-footer">
           Sudah punya akun? <a href="#/login">Masuk</a>
         </p>
       </form>

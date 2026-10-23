@@ -49,9 +49,19 @@ export function ManualTicketForm({
   }
 
   return (
-    <form className="card form-row" onSubmit={(event) => void submit(event)} noValidate>
+    <form
+      className="card form-row manual-ticket-card"
+      onSubmit={(event) => void submit(event)}
+      noValidate
+    >
       <h3>Tiket manual</h3>
-      <SelectField label="Layanan" value={chosen} onChange={(e) => setServiceId(e.target.value)}>
+      <SelectField
+        label="Layanan"
+        value={chosen}
+        onChange={(e) => setServiceId(e.target.value)}
+        disabled={active.length === 0}
+      >
+        {active.length === 0 ? <option value="">Tidak ada layanan</option> : null}
         {active.map((s) => (
           <option key={s.id} value={s.id}>
             {s.name}
@@ -80,7 +90,7 @@ export function ManualTicketForm({
           {problem}
         </p>
       ) : null}
-      <button type="submit" className="primary" disabled={busy || chosen === ''}>
+      <button type="submit" className="primary btn-create-ticket" disabled={busy || chosen === ''}>
         Buat tiket
       </button>
     </form>

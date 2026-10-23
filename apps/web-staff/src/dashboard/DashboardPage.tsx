@@ -126,8 +126,8 @@ export function DashboardPage() {
   const groups = groupByService(list);
 
   return (
-    <div className="stack">
-      <div className="toolbar">
+    <div className="stack dashboard-stack">
+      <div className="toolbar dashboard-toolbar">
         <SelectField
           label="Lokasi"
           value={location.id}
@@ -147,19 +147,19 @@ export function DashboardPage() {
       <ErrorNotice message={actionError ?? tickets.error ?? resources.error} />
 
       <dl className="metrics" aria-label="Ringkasan hari ini">
-        <div>
+        <div className="metric-card">
           <dt>Menunggu</dt>
           <dd>{metrics.waiting}</dd>
         </div>
-        <div>
+        <div className="metric-card">
           <dt>Sedang dilayani</dt>
           <dd>{metrics.inProgress}</dd>
         </div>
-        <div>
+        <div className="metric-card">
           <dt>Selesai</dt>
           <dd>{metrics.completed}</dd>
         </div>
-        <div>
+        <div className="metric-card">
           <dt>Rata-rata durasi</dt>
           <dd>
             {metrics.averageServiceMinutes === null ? '-' : `${metrics.averageServiceMinutes} mnt`}

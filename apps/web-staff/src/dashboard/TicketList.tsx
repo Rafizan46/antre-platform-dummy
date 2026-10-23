@@ -2,6 +2,7 @@ import type { UserRole } from '@antre/shared-types';
 import { useState } from 'react';
 
 import type { Resource, Ticket } from '../api/schemas';
+import { SelectField } from '../components/ui';
 import {
   TICKET_ACTION_LABELS,
   TICKET_STATUS_LABELS,
@@ -38,18 +39,17 @@ export function ServiceQueue({
   const headingId = `queue-${serviceId}`;
 
   return (
-    <section className="card" aria-labelledby={headingId}>
+    <section className="card queue-card" aria-labelledby={headingId}>
       <header className="card-head">
         <h3 id={headingId}>
           {serviceName} <span className="badge">{waiting} menunggu</span>
         </h3>
         {canCallTickets(role) ? (
           <div className="inline-form">
-            <label htmlFor={`res-${serviceId}`} className="visually-hidden">
-              Loket untuk {serviceName}
-            </label>
-            <select
+            <SelectField
               id={`res-${serviceId}`}
+              label={`Loket untuk ${serviceName}`}
+              hideLabel
               value={chosen}
               onChange={(event) => setResourceId(event.target.value)}
               disabled={eligible.length === 0}
@@ -60,7 +60,7 @@ export function ServiceQueue({
                   {r.name}
                 </option>
               ))}
-            </select>
+            </SelectField>
             <button
               type="button"
               className="primary"
@@ -77,9 +77,11 @@ export function ServiceQueue({
           <li key={ticket.id} className={`ticket status-${ticket.status.toLowerCase()}`}>
             <strong className="ticket-number">{ticket.ticket_number}</strong>
             <span className="ticket-name">{ticket.customer_name}</span>
-            <span className="badge">{TICKET_STATUS_LABELS[ticket.status]}</span>
+            <span className={`badge badge-status badge-${ticket.status.toLowerCase()}`}>
+              {TICKET_STATUS_LABELS[ticket.status]}
+            </span>
             {ticket.resource_name !== null && ticket.status !== 'WAITING' ? (
-              <span className="muted">{ticket.resource_name}</span>
+              <span className="muted ticket-resource">{ticket.resource_name}</span>
             ) : null}
             <span className="ticket-actions">
               {ticketActionsFor(ticket.status, role).map((action) => (
